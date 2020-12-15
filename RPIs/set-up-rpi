@@ -1,0 +1,41 @@
+
+
+# We use Raspbian OS is more easy to set up functionalities for command line interface (cli) users
+# if you want its good opportunity to be familiar with.
+
+basic:
+$ mkdir github
+(cd if you want)
+
+------
+
+install tp-link adapter:
+# install drivers
+# ask if you find trouble in download (404 Error) to send you file
+$ sudo wget http://www.fars-robotics.net/install-wifi -O /usr/bin/install-wifi
+$ sudo chmod +x /usr/bin/install-wifi
+$ sudo install-wifi
+
+# set up localization
+# select Localisation Options, Change Time Zone & Change WLAN Country
+$ sudo raspi-config
+
+------
+
+install babel:
+# remember use the same version in all divices to have more valid results
+# backup this project for the possible uses in future
+$ git clone https://github.com/jech/babeld.git
+$ cd babeld
+$ make
+$ sudo make install
+
+# print version
+$ babeld -V
+
+------
+-_____________________________________________________________----
+# the following is not working
+$ sudo echo 1 > /proc/sys/net/ipv4/ip_forward
+# TP-Link not working
+$ sudo nano /proc/sys/net/ipv4/ip_forward 

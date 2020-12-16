@@ -4,3 +4,4 @@
 - add technical comments e.g. input/output vars description
 - set up RPI files structure
 - set up all files structure
+- fix .gitignore to ignore DataFigures

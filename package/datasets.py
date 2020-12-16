@@ -20,7 +20,7 @@ class ZeroShotDataset(object):
     def __init__(self):
        self.__a_mlb = MultiLabelBinarizer()
        self.__r_lb = LabelBinarizer()
-       self.__r_emb_dict = np.load('DataPerFigure/gae/data/gae-node-embs.npy', allow_pickle=True)[()]
+       self.__r_emb_dict = np.load('../data/gae/gae-node-embs.npy', allow_pickle=True)[()]
 
     def load_data(self, train_paths, test_paths, seen_labels, unseen_labels):
 
@@ -88,7 +88,7 @@ class ZeroShotDataset(object):
     
     def __load_file(self, path, labels):
             # read file
-            with open('dataset_simple-final/'+path, 'r') as json_file:
+            with open('../data/dataset/'+path, 'r') as json_file:
                 raw_data=json_file.read()
 
             # parse file
@@ -305,9 +305,3 @@ class Dataset(object):
         )).batch(128)
 
         return new_data
-
-
-
-dz = ZeroShotDataset()
-labels = ['0','2','1']
-dz.load_data(TRAIN_PATHS, TEST_PATHS,['0','2'],['1'])

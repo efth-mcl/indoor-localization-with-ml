@@ -42,16 +42,16 @@ def iperf3_udp_obj_custom_avg(udp_obj):
         )
     return np.mean(Mbps)
 
-def udp_figure(udpresults_dict,figsize=(16,8),ylim_max=23,legend_fontsize=16,legend_loc='upper left', 
-    axes_label_fondsize=20,ticks_fontsize=16,plot_icons=['*-','o-','^-'],markersize=10,save_obj=None):
+def udp_figure(udpresults_dict,figsize=(16,8),ylim_max=23,legend_fontsize=20,legend_loc='upper left', 
+    axes_label_fontsize=20,ticks_fontsize=16,plot_icons=['*-','o-','^-'],markersize=10,save_obj=None):
     plt.figure(figsize=figsize)
     for (key, value), plot_icon  in zip(udpresults_dict.items(), plot_icons):
         udptime = [t for t in range(1, len(value)+1)]
         plt.plot(udptime, value ,plot_icon,markersize=markersize,label=key)
 
     plt.legend(fontsize=legend_fontsize, loc=legend_loc)
-    plt.xlabel(r'$time \, (s)$',fontsize=axes_label_fondsize)
-    plt.ylabel(r'$UDP \, Throughput \, (Mbps)$', fontsize=axes_label_fondsize)
+    plt.xlabel(r'$time \, (s)$',fontsize=axes_label_fontsize)
+    plt.ylabel(r'$UDP \, Throughput \, (Mbps)$', fontsize=axes_label_fontsize)
     plt.xticks(fontsize=ticks_fontsize)
     plt.yticks(fontsize=ticks_fontsize)
 
@@ -65,7 +65,7 @@ def udp_figure(udpresults_dict,figsize=(16,8),ylim_max=23,legend_fontsize=16,leg
     
 
 def mean_udp_per_dBm_bar_figure(avgsdBm_df, figsize=(16,8),ylim_max=23, 
-    legend_fontsize=16,legend_loc='upper left', axes_label_fondsize=20, 
+    legend_fontsize=20,legend_loc='upper left', axes_label_fontsize=20, 
     ticks_fontsize=20,save_obj=None):
 
     plt.figure(figsize=figsize)
@@ -76,7 +76,7 @@ def mean_udp_per_dBm_bar_figure(avgsdBm_df, figsize=(16,8),ylim_max=23,
     
     plt.legend(fontsize=legend_fontsize, loc=legend_loc)
     plt.ylabel(r'$Mean \, UDP \, Throughput \, (Mbps)$',
-        fontsize=axes_label_fondsize)
+        fontsize=axes_label_fontsize)
 
     plt.xticks(index + bar_width, [r'${}$'.format(idx) for idx in avgsdBm_df.index],
         fontsize=ticks_fontsize)
@@ -91,8 +91,8 @@ def mean_udp_per_dBm_bar_figure(avgsdBm_df, figsize=(16,8),ylim_max=23,
         plt.savefig('DataFigures/routing/{}/{}.eps'.format(*save_obj), format='eps')
 
 
-def model_feagure(means_vals, model_vals, figsize=(16,8), ylim_max=23, legend_fontsize=16,
-    legend_loc='upper left', axes_label_fondsize=20, ticks_fontsize=16, plot_icons=['*-','o-'],
+def model_feagure(means_vals, model_vals, figsize=(16,8), ylim_max=23, legend_fontsize=20,
+    legend_loc='upper left', axes_label_fontsize=20, ticks_fontsize=16, plot_icons=['*-','o-'],
     markersize=10, save_obj=None):
 
     plt.figure(figsize=figsize)
@@ -102,8 +102,8 @@ def model_feagure(means_vals, model_vals, figsize=(16,8), ylim_max=23, legend_fo
     plt.plot(hopsaxes, model_vals, plot_icons[1], markersize=markersize, label=r'$Model \, UDP$')
 
     plt.legend(fontsize=legend_fontsize, loc=legend_loc)
-    plt.xlabel(r'$hops \, \#$',fontsize=axes_label_fondsize)
-    plt.ylabel(r'$Mean \, UDP \, Throughput \, (Mbps)$', fontsize=axes_label_fondsize)
+    plt.xlabel(r'$hops \, \#$',fontsize=axes_label_fontsize)
+    plt.ylabel(r'$Mean \, UDP \, Throughput \, (Mbps)$', fontsize=axes_label_fontsize)
     plt.xticks([1,2,3], fontsize=ticks_fontsize)
     plt.yticks(fontsize=ticks_fontsize)
 
@@ -115,8 +115,8 @@ def model_feagure(means_vals, model_vals, figsize=(16,8), ylim_max=23, legend_fo
         plt.savefig('DataFigures/routing/{}/{}.eps'.format(*save_obj), format='eps')
 
 
-def mean_udp_figure(avgsdBm_df, figsize=(16,8),ylim_max=23, legend_fontsize=16,
-    legend_loc='upper left', axes_label_fondsize=20, ticks_fontsize=20,save_obj=None):
+def mean_udp_figure(avgsdBm_df, figsize=(16,8),ylim_max=23, legend_fontsize=20,
+    legend_loc='upper left', axes_label_fontsize=20, ticks_fontsize=20,save_obj=None):
     
     plt.figure(figsize=figsize)
     index = np.arange(3)
@@ -126,7 +126,7 @@ def mean_udp_figure(avgsdBm_df, figsize=(16,8),ylim_max=23, legend_fontsize=16,
     
     plt.legend(fontsize=legend_fontsize, loc=legend_loc)
     plt.ylabel(r'$Mean \, UDP \, Throughput \, (Mbps)$',
-        fontsize=axes_label_fondsize)
+        fontsize=axes_label_fontsize)
 
     plt.xticks(index + bar_width, [r'${}$'.format(idx) for idx in avgsdBm_df.index],
         fontsize=ticks_fontsize)
@@ -142,7 +142,7 @@ def mean_udp_figure(avgsdBm_df, figsize=(16,8),ylim_max=23, legend_fontsize=16,
 
 
 def mean_udp_bar3d_figure(complite_means_per_txpower, line_means_per_txpower, babeld_means_per_txpower, 
-    figsize=(8,8), legend_fontsize=20,legend_loc='upper right', axes_label_fondsize=12, ticks_fontsize=12,save_obj=None):
+    figsize=(8,8), legend_fontsize=20,legend_loc='upper right', axes_label_fontsize=12, ticks_fontsize=12,save_obj=None):
 
     fig = plt.figure(figsize=figsize)
     ax = fig.gca(projection='3d')

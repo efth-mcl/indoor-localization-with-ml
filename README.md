@@ -5,3 +5,4 @@
 - set up RPI files structure
 - set up all files structure
 - fix .gitignore to ignore DataFigures
+- set privet epochs counting var (dynamic)

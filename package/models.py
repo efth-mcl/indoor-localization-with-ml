@@ -347,15 +347,15 @@ class Trainer(object):
         if print_return_history:
           print('val_cost: {}, val_score: {}'.format(val_cost_mtr, val_score_mtr))
 
-        if early_stopping:
-          stop_training = self.__early_stopping(history, min_delta, patience)
+          if early_stopping:
+            stop_training = self.__early_stopping(history, min_delta, patience)
       
-      if dataset_test is not None:
-        print('test_cost: {}, test_score: {}'.format(test_cost_mtr, test_score_mtr))
+          if dataset_test is not None:
+            print('test_cost: {}, test_score: {}'.format(test_cost_mtr, test_score_mtr))
 
-      if dataset_val is not None and dataset_test is not None:
-        harmonic_score = 2*test_score_mtr*val_score_mtr/(test_score_mtr+val_score_mtr)
-        print('harmonic score: {}'.format(harmonic_score))
+          if dataset_val is not None and dataset_test is not None:
+            harmonic_score = 2*test_score_mtr*val_score_mtr/(test_score_mtr+val_score_mtr)
+            print('harmonic score: {}'.format(harmonic_score))
 
       try:
         if stop_training:

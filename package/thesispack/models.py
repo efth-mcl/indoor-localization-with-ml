@@ -5,6 +5,7 @@ import tensorflow as tf
 from tensorflow.keras import initializers
 from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
+import copy
 
 # 0 input
 # 1 output loss
@@ -243,55 +244,55 @@ class Metrices(object):
     return y_
 
 
+class EarlyStoping(object):
+  def __init__(self, entries):
+    self.es_strategy = None
+    self.es_metric = None
+    self.__dict__.update(entries)
+    if self.es_strategy is 'first_drop' and self.es_metric is not None:
+      self.__metric_max = 0
+      
+    
+  def check_stop(self, h):
+    if len(h[self.es_metric])>0:
+      if self.es_strategy is not None and self.es_metric is not None:
+        sub_h = h[self.es_metric]
+        if self.es_strategy is 'first_drop':
+          if sub_h[-1] > self.__metric_max:
+            self.__metric_max = sub_h[-1]
+          elif self.__metric_max > 0 and sub_h[-1] < self.__metric_max:
+            return True
+          return False
+        elif self.es_strategy is 'patience':
+          if len(sub_h) >= self.es_patience:
+            if abs(sub_h[-1] - sub_h[-self.es_patience]) < self.es_min_delta:
+              return True
+            else:
+              return False
+          return False
+
 class Trainer(object):
-  def __init__(self, learning_rate=1e-4, amsgrad=True ):
+  def __init__(self, early_stop=None, learning_rate=1e-4, amsgrad=True):
     self.__optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, amsgrad=amsgrad)
-
-  def __early_stopping(self, H, min_delta, patience=1):
-    if patience < 1:
-      patience = 1
-    if len(H['val_score']) >= patience:
-      if abs(H['val_score'][-1] - H['val_score'][-patience]) < min_delta:
-        return True
-      else:
-        return False
-    else:
-      return False
-
-  # def __grads(self, cost_loss):
-  #   with tf.GradientTape() as tape:
-  #       out = self.call(inputs)
-  #       loss_r = self.mse_l(labels[0], out[0])
-  #       loss_a = self.cce_l(labels[2], out[1])
-  #       loss = loss_a + loss_r
-  #   return tape.gradient(loss, self.trainable_variables)
+    self.__early_stop = early_stop
+    self.__epochs_cnt = 0
+    self.history = {
+      'train_cost': [],
+      'train_score': [],
+      'val_cost': [],
+      'val_score': [],
+      'test_cost': [],
+      'test_score': [],
+      'harmonic_score': []
+    }
   
-  def train(self, dataset, epochs=10, dataset_val=None,dataset_test=None, min_delta=0, patience=0, print_return_history=True):
+  
+  def train(self, dataset, epochs=10, dataset_val=None,dataset_test=None, history_learning_process=True):
     # we use an print_return_history flag how to not use this maybe use class or curried function
     # use something to not use 'if' again (like class)!
-    if print_return_history:
-      history = {
-          'train_cost': [],
-          'train_score': []
-      }
-      if dataset_val is not None:
-        history['val_cost'] = []
-        history['val_score'] = []
-      
-      if dataset_test is not None:
-        history['test_cost'] = []
-        history['test_score'] = []
-      
-
-      if min_delta > 0 and patience > 0:
-        early_stopping = True
-      else:
-        early_stopping = False
- 
-    
-
     for epoch in range(epochs):
-      # super hard code 
+      # super hard code
+      self.__epochs_cnt += 1
       self.set_knn_out(False)
       for batch in dataset:
         with tf.GradientTape() as tape:
@@ -299,19 +300,21 @@ class Trainer(object):
         grads = tape.gradient(cost_loss, self.trainable_variables)
         self.__optimizer.apply_gradients(zip(grads, self.trainable_variables))
 
-      if print_return_history:
+      print ('Epoch {} finished'.format(self.__epochs_cnt))
+      if history_learning_process:
         self.set_knn_out(False)
         train_cost_mtr = self.cost_mtr.metric_dataset(dataset)
         self.set_knn_out(True)
         train_score_mtr = self.score_mtr.metric_dataset(dataset)
-        print ('Epoch {} finished'.format(epoch+1))
-        history['train_cost'].append(
+        
+        self.history['train_cost'].append(
             train_cost_mtr
         )
 
-        history['train_score'].append(
+        self.history['train_score'].append(
             train_score_mtr
         )
+        print('train_cost: {}, train_score: {}'.format(train_cost_mtr, train_score_mtr))
 
         if dataset_val is not None:
           # this is super hard code
@@ -320,51 +323,41 @@ class Trainer(object):
           val_cost_mtr = self.cost_mtr.metric_dataset(dataset_val)
           self.set_knn_out(True)
           val_score_mtr = self.score_mtr.metric_dataset(dataset_val)
-          history['val_cost'].append(
+          self.history['val_cost'].append(
              val_cost_mtr
           )
 
-          history['val_score'].append(
+          self.history['val_score'].append(
               val_score_mtr
           )
-        
+          print('val_cost: {}, val_score: {}'.format(val_cost_mtr, val_score_mtr))
         if dataset_test is not None:
           self.set_knn_out(False)
           test_cost_mtr = self.cost_mtr.metric_dataset(dataset_test)
           self.set_knn_out(True)
           test_score_mtr = self.score_mtr.metric_dataset(dataset_test)
-          history['test_cost'].append(
+          self.history['test_cost'].append(
             test_cost_mtr
           )
-
-          history['test_score'].append(
+          self.history['test_score'].append(
             test_score_mtr
           )
+          print('test_cost: {}, test_score: {}'.format(test_cost_mtr, test_score_mtr))
 
-        print('train_cost: {}, train_score: {}'.format(train_cost_mtr, train_score_mtr))
-      
-      if dataset_val is not None:
-        if print_return_history:
-          print('val_cost: {}, val_score: {}'.format(val_cost_mtr, val_score_mtr))
+        if dataset_val is not None and dataset_test is not None:
+          harmonic_score = 2*test_score_mtr*val_score_mtr/(test_score_mtr+val_score_mtr)
+          self.history['harmonic_score'].append(
+            harmonic_score
+          )
+          print('harmonic score: {}'.format(harmonic_score))
 
-          if early_stopping:
-            stop_training = self.__early_stopping(history, min_delta, patience)
-      
-          if dataset_test is not None:
-            print('test_cost: {}, test_score: {}'.format(test_cost_mtr, test_score_mtr))
-
-          if dataset_val is not None and dataset_test is not None:
-            harmonic_score = 2*test_score_mtr*val_score_mtr/(test_score_mtr+val_score_mtr)
-            print('harmonic score: {}'.format(harmonic_score))
-
-      try:
-        if stop_training:
-          break
-      except Exception as e:
-        pass
-    
-    if print_return_history:
-      return history
+        try:
+          if self.__early_stop.check_stop(copy.deepcopy(self.history)):
+            print('Stop Training')
+            break
+        except ModuleNotFoundError as e:
+          pass
+        
 
 
 class LogisticClassifier(tf.keras.Model, Metrices, Trainer):
@@ -467,9 +460,9 @@ class Knn(object):
 
 class Rnn(tf.keras.Model, Trainer):
 
-  def __init__(self, knn, x_dim, seed=None):
+  def __init__(self, knn, x_dim, early_stop=None, seed=None):
     tf.keras.Model.__init__(self,name='rnn')
-    Trainer.__init__(self)
+    Trainer.__init__(self, early_stop)
     self.__knn = knn
     self.__knn_out = False
 

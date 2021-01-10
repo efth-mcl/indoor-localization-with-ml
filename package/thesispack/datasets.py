@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
+from .methods import list2graph
 
 TRAIN_PATHS = [
     "train_data.json",
@@ -16,11 +17,33 @@ TEST_PATHS = [
 
 ]
 
-class ZeroShotDataset(object):
+
+GAE_dataset ={
+    'Labels': ['0', '1', '2', '3', '4', '5'],
+    'listgraph': [[
+        [0,1],
+        [1,2],
+        [1,3],
+        [1,4],
+        [1,5]
+    ]]
+}
+
+
+class GaeDataset(object):
     def __init__(self):
+       X, A, Atld = list2graph(GAE_dataset['listgraph'])
+
+       self.train = tf.data.Dataset.from_tensor_slices((
+            X, Atld, A
+        )).batch(128)
+
+
+class ZeroShotDataset(object):
+    def __init__(self, embs_id):
        self.__a_mlb = MultiLabelBinarizer()
        self.__r_lb = LabelBinarizer()
-       self.__r_emb_dict = np.load('../data/gae/gae-node-embs.npy', allow_pickle=True)[()]
+       self.__r_emb_dict = np.load('../data/gae/gae-node-embs{}.npy'.format(embs_id), allow_pickle=True)[()]
 
     def load_data(self, train_paths, test_paths, seen_labels, unseen_labels):
 
@@ -44,7 +67,6 @@ class ZeroShotDataset(object):
         self.__r_train = self.__r_lb.transform(self.__r_train)
         self.__r_val = self.__r_lb.transform(self.__r_val)
         self.__r_test = self.__r_lb.transform(self.__r_test)
-
 
         self.train = tf.data.Dataset.from_tensor_slices((
             tf.cast(self.__x_train, tf.float32),
@@ -128,7 +150,9 @@ class ZeroShotDataset(object):
         return self.__a_mlb.transform(labels)
 
 
-
+#-------------------------------#
+#- Pre codes -------------------#
+#-------------------------------#
 class Dataset(object):
     # x: data
     # r: room

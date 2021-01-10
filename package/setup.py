@@ -40,6 +40,7 @@ setup(
     package_dir={'thesispack': 'thesispack'},
     install_requires=[
         # 'docopt',
+        "pydocstyle",
         'tensorflow==2.2.0',
         'numpy==1.19.1',
         'pandas==1.0.5',

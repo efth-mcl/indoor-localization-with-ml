@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Dense, Dropout, Activation, PReLU, BatchNormalization, Input, Embedding, LSTM, Bidirectional, TimeDistributed, Flatten, Conv1D
+from tensorflow.keras.layers import Dense, Input, LSTM, Bidirectional
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.activations import tanh
 import tensorflow as tf
@@ -6,6 +6,8 @@ from tensorflow.keras import initializers
 from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
 import copy
+from functools import partial
+
 
 # 0 input
 # 1 output loss
@@ -17,7 +19,6 @@ class MetricLossBase(object):
     pass
   
   def status_idxs(self, tepy, status):
-
     idxs = []
     for i, st in enumerate(status):
       if tepy in st:
@@ -41,7 +42,6 @@ class MetricBase(MetricLossBase):
     else:
       self.__callfn = model.__call__
 
-
   def metric_dataset(self, dataset):
     for batch in dataset:
       inputs = self.get_batch_by_indxs(batch, self.__input_idxs)
@@ -54,7 +54,6 @@ class MetricBase(MetricLossBase):
       mtr += metric.result().numpy()
       metric.reset_states()
     return mtr
-
 
   def metric_batch(self, true_outputs, predict_outputs):
     for i, ms in enumerate(self.__mtr_select):
@@ -85,6 +84,22 @@ class LossBase(MetricLossBase):
     
     return loss
 
+# tf.nn.weighted_cross_entropy_with_logits
+class WeightedCrossEntropyLogitsMetric(tf.keras.metrics.Metric):
+
+  def __init__(self, w_p):
+    super(WeightedCrossEntropyLogitsMetric, self).__init__(name='weighted_cross_entropy_with_logits')
+    self.__loss = partial(tf.nn.weighted_cross_entropy_with_logits,pos_weight=w_p)
+    self.__losssum = self.add_weight(name='losssum', initializer='zeros')
+
+  def update_state(self, y_true, y_pred, sample_weight=None):
+    self.__losssum.assign_add(tf.reduce_sum(self.__loss(y_true, y_pred)))
+
+  def result(self):
+    return self.__losssum
+
+  def reset_states(self):
+    self.__losssum.assign(0)
 
 class Metrices(object):  
   
@@ -95,14 +110,14 @@ class Metrices(object):
     self.__acc_mtc = tf.keras.metrics.CategoricalAccuracy()
 
   def accuracy_batch(self, inputs, labels):
-    predict = self.call(inputs)
+    predict = self.__callfn(inputs)
     predict_r = self.__knn.predict(predict[0])
     self.__acc_mtc.update_state(labels[1], predict_r)
     self.__acc_mtc.update_state(labels[2], predict[1])
 
   def accuracy_dataset(self, dataset):
     for (batch, (inputs, *labels)) in enumerate(dataset):
-      self.accuracy_batch(inputs, labels)
+      self.accuracy_batch(*inputs, labels)
     
     acc = self.__acc_mtc.result().numpy()
     self.__acc_mtc.reset_states()
@@ -113,7 +128,7 @@ class Metrices(object):
     self.__pre_mtr = tf.keras.metrics.Precision()
 
   def precision_batch(self, inputs, labels):
-    predict = self.call(inputs)
+    predict = self.__callfn(*inputs)
     predict_r = self.__knn.predict(predict[0])
     self.__pre_mtr.update_state(labels[1], predict_r)
     self.__pre_mtr.update_state(labels[2], predict[1])
@@ -130,7 +145,7 @@ class Metrices(object):
     self.__pre_thres_mtr = tf.keras.metrics.Precision(thresholds=thres)
 
   def precision_thres_batch(self, inputs, labels):
-    predict = self.call(inputs)
+    predict = self.__callfn(*inputs)
     predict_r = self.__knn.predict(predict[0])
     self.__pre_thres_mtr.update_state(labels[1], predict_r)
     self.__pre_thres_mtr.update_state(labels[2], predict[1])
@@ -148,7 +163,7 @@ class Metrices(object):
     self.__recall_mtr = tf.keras.metrics.Recall()
 
   def recall_batch(self, inputs,labels):
-    predict = self.call(inputs)
+    predict = self.__callfn(*inputs)
     predict_r = self.__knn.predict(predict[0])
     self.__recall_mtr.update_state(labels[1], predict_r)
     self.__recall_mtr.update_state(labels[2], predict[1])
@@ -165,7 +180,7 @@ class Metrices(object):
     self.__rec_thres_mtr = tf.keras.metrics.Recall(thresholds=thres)
 
   def recall_thres_batch(self, inputs,labels):
-    predict = self.call(inputs)
+    predict = self.__callfn(*inputs)
     predict_r = self.__knn.predict(predict[0])
     self.__rec_thres_mtr.update_state(labels[1], predict_r)
     self.__rec_thres_mtr.update_state(labels[2], predict[1])
@@ -223,7 +238,7 @@ class Metrices(object):
 
   def loss_dataset(self, dataset):
     for (batch, (inputs, *labels)) in enumerate(dataset):
-      predict = self.call(inputs)
+      predict = self.__callfn(*inputs)
       self.mse_batch(predict[0], labels[0])
       self.cce_batch(predict[1],labels[2])
     
@@ -245,12 +260,13 @@ class Metrices(object):
 
 
 class EarlyStoping(object):
-  def __init__(self, entries):
+  def __init__(self, entries, save_weights_obj=None):
     self.es_strategy = None
     self.es_metric = None
     self.__dict__.update(entries)
     if self.es_strategy is 'first_drop' and self.es_metric is not None:
       self.__metric_max = 0
+    self.__save_weights_obj = save_weights_obj
       
     
   def check_stop(self, h):
@@ -260,6 +276,7 @@ class EarlyStoping(object):
         if self.es_strategy is 'first_drop':
           if sub_h[-1] > self.__metric_max:
             self.__metric_max = sub_h[-1]
+            self.__save_weights()
           elif self.__metric_max > 0 and sub_h[-1] < self.__metric_max:
             return True
           return False
@@ -270,11 +287,18 @@ class EarlyStoping(object):
             else:
               return False
           return False
+  
+
+  def __save_weights(self):
+    if self.__save_weights_obj is not None:
+      self.__save_weights_obj()
+
 
 class Trainer(object):
-  def __init__(self, early_stop=None, learning_rate=1e-4, amsgrad=True):
+  def __init__(self, early_stop_vars=None, save_weights_obj=None, learning_rate=1e-4, amsgrad=True):
     self.__optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, amsgrad=amsgrad)
-    self.__early_stop = early_stop
+    if early_stop_vars is not None:
+      self.__early_stop = EarlyStoping(early_stop_vars, save_weights_obj)
     self.__epochs_cnt = 0
     self.history = {
       'train_cost': [],
@@ -285,15 +309,14 @@ class Trainer(object):
       'test_score': [],
       'harmonic_score': []
     }
-  
-  
+ 
   def train(self, dataset, epochs=10, dataset_val=None,dataset_test=None, history_learning_process=True):
     # we use an print_return_history flag how to not use this maybe use class or curried function
     # use something to not use 'if' again (like class)!
     for epoch in range(epochs):
       # super hard code
       self.__epochs_cnt += 1
-      self.set_knn_out(False)
+      self.set_score_mode(False)
       for batch in dataset:
         with tf.GradientTape() as tape:
           cost_loss = self.cost_loss.loss_batch(batch)
@@ -302,15 +325,14 @@ class Trainer(object):
 
       print ('Epoch {} finished'.format(self.__epochs_cnt))
       if history_learning_process:
-        self.set_knn_out(False)
+        self.set_score_mode(False)
         train_cost_mtr = self.cost_mtr.metric_dataset(dataset)
-        self.set_knn_out(True)
+        self.set_score_mode(True)
         train_score_mtr = self.score_mtr.metric_dataset(dataset)
         
         self.history['train_cost'].append(
             train_cost_mtr
         )
-
         self.history['train_score'].append(
             train_score_mtr
         )
@@ -319,23 +341,24 @@ class Trainer(object):
         if dataset_val is not None:
           # this is super hard code
           # kouleison
-          self.set_knn_out(False)
+          self.set_score_mode(False)
           val_cost_mtr = self.cost_mtr.metric_dataset(dataset_val)
-          self.set_knn_out(True)
+          self.set_score_mode(True)
           val_score_mtr = self.score_mtr.metric_dataset(dataset_val)
+
           self.history['val_cost'].append(
              val_cost_mtr
           )
-
           self.history['val_score'].append(
               val_score_mtr
           )
           print('val_cost: {}, val_score: {}'.format(val_cost_mtr, val_score_mtr))
         if dataset_test is not None:
-          self.set_knn_out(False)
+          self.set_score_mode(False)
           test_cost_mtr = self.cost_mtr.metric_dataset(dataset_test)
-          self.set_knn_out(True)
+          self.set_score_mode(True)
           test_score_mtr = self.score_mtr.metric_dataset(dataset_test)
+
           self.history['test_cost'].append(
             test_cost_mtr
           )
@@ -346,98 +369,16 @@ class Trainer(object):
 
         if dataset_val is not None and dataset_test is not None:
           harmonic_score = 2*test_score_mtr*val_score_mtr/(test_score_mtr+val_score_mtr)
+
           self.history['harmonic_score'].append(
             harmonic_score
           )
           print('harmonic score: {}'.format(harmonic_score))
 
-        try:
-          if self.__early_stop.check_stop(copy.deepcopy(self.history)):
+        if self.__early_stop.check_stop(copy.deepcopy(self.history)):
             print('Stop Training')
             break
-        except ModuleNotFoundError as e:
-          pass
-        
 
-
-class LogisticClassifier(tf.keras.Model, Metrices, Trainer):
-
-  def __init__(self, x_dim, n_class, class_weights=None, pr_thres=[0.0,0.25,0.5,0.75,1.0]):
-    try:
-      self.n_class
-      self.x_dim
-    except AttributeError:
-      super(LogisticClassifier, self).__init__(name='logistic')
-      self.n_class = n_class
-      self.x_dim = x_dim
-      self.class_weights = class_weights
-      self.loss_mtc()
-      self.accuracy_mtr()
-      self.precision_mtr()
-      self.precision_thres_mtr(pr_thres)
-      self.recall_mtr()
-      self.recall_thres_mtr(pr_thres)
-      self.f1_addition_mtr()
-    else:
-      pass
-    
-    self.Input = Input(self.x_dim)
-    self.conv1 = tf.keras.layers.Conv1D(64,5,name="conv1",activation="tanh")
-    # self.conv_batchnorm1 = BatchNormalization(name='conv_batchnorm1')
-    # self.conv_prelu1 = PReLU(name="conv_prelu1")
-
-    # self.conv2 = tf.keras.layers.Conv1D(32,3,name="conv2")
-    # self.conv_batchnorm2 = BatchNormalization(name='conv_batchnorm2')
-    # self.conv_prelu2 = PReLU(name="conv_prelu2")
-
-    # self.conv3 = tf.keras.layers.Conv1D(64,5,name="conv3")
-    # self.conv_batchnorm3 = BatchNormalization(name='conv_batchnorm3')
-    # self.conv_prelu3 = PReLU(name="conv_prelu3")
-
-    self.flatten = Flatten()
-    
-    self.dense1 = Dense(128,activation="tanh",kernel_regularizer=tf.keras.regularizers.l2(0.001), name='dense1')
-    self.dense_batchnorm1 = BatchNormalization(name='dense_batchnorm1')
-    self.dense_prelu1 = PReLU(name="dense_prelu1")
-
-    # self.dense2 = Dense(128, activation=PReLU(), kernel_regularizer=tf.keras.regularizers.l2(0.001), name='dense2')
-    # self.dense_batchnorm2 = BatchNormalization(name='dense_batchnorm2')
-    # self.dense_prelu2 = PReLU(name="dense_prelu2")
-
-    self.sigmoid = Dense(self.n_class, activation="sigmoid", name='sigmoidout')
-  
-  def call(self, inputs):
-    x = self.conv1(inputs)
-    # x = self.conv_batchnorm1(x)
-    # x = self.conv_prelu1(x)
-
-    # x = self.conv2(x)
-    # x = self.conv_batchnorm2(x)
-    # x = self.conv_prelu2(x)
-
-    # x = self.conv3(x)
-    # x = self.conv_batchnorm3(x)
-    # x = self.conv_prelu3(x)
-
-    x = self.flatten(inputs)
-
-    x = self.dense1(x)
-    x = self.dense_batchnorm1(x)
-    x = self.dense_prelu1(x)
-
-
-    # x = self.dense2(x)
-    # x = self.dense_batchnorm2(x)
-    # x = self.dense_prelu2(x)
-
-    x = self.sigmoid(x)
-    return x
-  
-  def set_params(self, reset_weights=False, **params):
-
-    # super hack to reset weghts
-    if reset_weights == True:
-      self.__init__(self.x_dim, self.n_class)
 
 
 class Knn(object):
@@ -446,7 +387,7 @@ class Knn(object):
   
   def fit(self, x, y):
     self.__knn.fit(x, y)
-  
+
   def predict(self, x):
     return self.__knn.predict(x)
   
@@ -457,14 +398,54 @@ class Knn(object):
     pred = tf.concat(pred, axis=0)
     return pred
     
+class GCN(tf.Module):
+  def __init__(self,in_features,out_features, activation=None):
+    super(GCN,self).__init__(name="gcn")
+  
+    self.weights = tf.Variable(
+      tf.keras.initializers.GlorotUniform()(shape=[in_features, out_features]),
+      name='weights'
+    )
+    self.bais = tf.Variable(
+      tf.keras.initializers.GlorotUniform()(shape=[out_features]),
+      name='bais'
+    )
+    self.activation = tf.keras.activations.get(activation)
+
+  def __call__(self,inputs,Atld):
+    x = tf.matmul(Atld,inputs)
+    x = tf.matmul(x,self.weights) + self.bais
+    x = self.activation(x)
+    return x
+
+class IP(tf.Module):
+  def __init__(self,in_features=None,activation=None):
+    super(IP,self).__init__(name='ip')
+    self.weights = None
+    if in_features is not None:
+      self.weights = tf.Variable(
+        tf.random.normal([in_features, in_features]), name='weights')
+
+    self.activation = tf.keras.activations.get(activation)
+
+  def __call__(self,inputs):
+    x = inputs
+    if self.weights is not None:
+      x = tf.matmul(x,self.weights)
+    x = tf.matmul(x,inputs,transpose_b=True)
+    x = self.activation(x)
+    return x
 
 class Rnn(tf.keras.Model, Trainer):
 
-  def __init__(self, knn, x_dim, early_stop=None, seed=None):
+  def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4, seed=None):
     tf.keras.Model.__init__(self,name='rnn')
-    Trainer.__init__(self, early_stop)
+    save_weights_obj = None
+    if weights_outfile is not None:
+      save_weights_obj = partial(self.save_weights, "../weights/weights_best_{}.tf".format(weights_outfile))
+    Trainer.__init__(self, early_stop_vars, save_weights_obj, learning_rate)
     self.__knn = knn
-    self.__knn_out = False
+    self.__score_mode = False
 
     self.__status = [
       [0],
@@ -497,10 +478,11 @@ class Rnn(tf.keras.Model, Trainer):
       self.__status,
       [0, 1]
     )
-    self.x_dim = x_dim
-
+    
     tf.random.set_seed(seed)
-    self.Input = Input(self.x_dim)
+    
+    x_dim = (24, 4)
+    self.Input = Input(x_dim)
 
     self.lstm1 =  LSTM(24,return_sequences=True,name="lstm1")
     self.bidirectional1 = Bidirectional(self.lstm1,name="bidirectional1")
@@ -514,11 +496,11 @@ class Rnn(tf.keras.Model, Trainer):
     self.lstm32 = LSTM(24,name="lstm32")
     self.bidirectional32 = Bidirectional(self.lstm32,name="bidirectional32")
 
-    self.denseout1 = Dense(256,activation=None,name="denseout1")
+    self.denseout1 = Dense(embsD,activation=None,name="denseout1")
     self.denseout2 = Dense(2,activation="softmax",name="denseout2")
 
-  def set_knn_out(self, knn_out):
-    self.__knn_out = knn_out
+  def set_score_mode(self, score_mode):
+    self.__score_mode = score_mode
 
   def call(self, inputs):
 
@@ -532,54 +514,80 @@ class Rnn(tf.keras.Model, Trainer):
     y1 = self.denseout1(x31)
 
     # super hard code
-    if self.__knn_out:
+    if self.__score_mode:
       y1 = self.__knn.predict(y1)
 
     y2 = self.denseout2(x32)
 
     return y1, y2
   
+# 0 input
+# 1 output | loss
+# 2 output | mtr
+class miniGAEv1(tf.Module, Trainer):
+  def __init__(self, ft_number, w_p, early_stop_vars=None, learning_rate=1e-2):
+    tf.Module.__init__(self, name='gae')
+    Trainer.__init__(self, early_stop_vars, learning_rate=learning_rate)
+    self.__score_mode = False
 
-class GCN(tf.Module):
-  def __init__(self,in_features,out_features, activation=None):
-    super(GCN,self).__init__(name="gcn")
+    self.__status = [
+      [0],
+      [0],
+      [1,2]
+    ]
+
+    self.cost_mtr = MetricBase(self,
+      [WeightedCrossEntropyLogitsMetric(w_p)],
+      self.__status,
+      [0],
+      1
+    )
+
+    self.score_mtr = MetricBase(self,
+      [tf.keras.metrics.BinaryAccuracy()],
+      self.__status,
+      [0]
+    )
+
+    self.cost_loss = LossBase(self,
+      [WeightedCrossEntropyLogitsMetric(w_p)],
+      self.__status,
+      [0]
+    )
+
+    self.gcn1 = GCN(ft_number,16,'relu')
+    self.gcn2 = GCN(16,32)
+
+    self.ip = IP()
   
-    self.weights = tf.Variable(
-      tf.keras.initializers.GlorotUniform()(shape=[in_features, out_features]),
-      name='weights'
-    )
-    self.bais = tf.Variable(
-      tf.keras.initializers.GlorotUniform()(shape=[out_features]),
-      name='bais'
-    )
-    self.activation = tf.keras.activations.get(activation)
-
-  def __call__(self,inputs,A_hat):
-    x = tf.matmul(A_hat,inputs)
-    x = tf.matmul(x,self.weights) + self.bais
-    x = self.activation(x)
+  def encoder(self,X, Atld):
+      x = self.gcn1(X,Atld)
+      x = self.gcn2(x,Atld)
+      return x
+  
+  def decoder(self,z):
+    x = self.ip(z)
     return x
-
-class IP(tf.Module):
-  def __init__(self,in_features=None,activation=None):
-    super(IP,self).__init__(name='ip')
-    self.weights = None
-    if in_features is not None:
-      self.weights = tf.Variable(
-        tf.random.normal([in_features, in_features]), name='weights')
-
-    self.activation = tf.keras.activations.get(activation)
-
-
+  
   def __call__(self,inputs):
-    x = inputs
-    if self.weights is not None:
-      x = tf.matmul(x,self.weights)
-    x = tf.matmul(x,inputs,transpose_b=True)
-    x = self.activation(x)
-    return x
+    x = self.encoder(inputs[0],inputs[1])
+    y = self.decoder(x)
+
+    if self.__score_mode:
+      y = tf.nn.sigmoid(y)
+
+    if x.shape[0] == 1:
+      y = tf.reshape(y, (1, *y.shape))
+    return tuple((y))
+  
+  # super hard code
+  def set_score_mode(self, score_mode):
+    self.__score_mode = score_mode
 
 
+#-------------------------------#
+#- Pre codes -------------------#
+#-------------------------------#
 class GAE(tf.Module):
   def __init__(self,ft_number):
     super(GAE,self).__init__(name='gae')
@@ -617,6 +625,3 @@ class GAE(tf.Module):
     x = self.encoder(X,A)
     x = self.decoder(x)
     return x
-
-
-

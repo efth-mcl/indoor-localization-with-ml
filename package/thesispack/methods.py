@@ -14,6 +14,7 @@ from itertools import product
 
 
 class Iperf3Out:
+    
     def __init__(self, **entries):
         self.__dict__.update(entries)
 
@@ -222,51 +223,63 @@ def random_uncycle_graph(num_v):
         g.remove_edge(*edges[0])
     A = nx.adjacency_matrix(g).toarray()
     A = A + np.eye(A.shape[0])
-    A_hat = localpooling_filter(A)
+    Atld = localpooling_filter(A)
     X = np.eye(A.shape[1])
     X = X.reshape(X.shape[0],1)
-    return A, A_hat, X
+    return A, Atld, X
 
 def gen_batch_graphs():
     batch = 500
     while True:
-        A_hat_list = []
+        Atld_list = []
         A_list = []
         X_list = []
         gen_v = np.random.randint(5, 8,batch)
         for num_v in gen_v:
-            A, A_hat, X = random_uncycle_graph(num_v)
+            A, Atld, X = random_uncycle_graph(num_v)
             A_list.append(A)
-            A_hat_list.append(A_hat)
+            Atld_list.append(Atld)
             X_list.append(X)
         X, A, I = numpy_to_disjoint(X_list, A_list)
-        _, A_hat, _ = numpy_to_disjoint(X_list, A_hat_list)
+        _, Atld, _ = numpy_to_disjoint(X_list, Atld_list)
         A = A.toarray()
-        A_hat = A_hat.toarray()
-        yield A, A_hat, X
+        Atld = Atld.toarray()
+        yield A, Atld, X
 
 
 def nx_graph(num_v, want):
+    """Random Graph.
+
+    Args:
+        num_v: A int, Number of vertexes
+        want: A list, Type graphs which want to generate
+
+    Returns:
+        A: A ndarray, Adjacency matrix
+        Atld: A ndarray, Normalized adjacency matrix
+        X: A ndarray, Nodes Features (identity matrix) 
+        rgi: A int, Random graph index
+    """
     w_sum = sum(want)
     want = [sum(want[:i]) if want[i] == 1 else -1 for i in range(len(want))]
-    r = np.random.randint(0,w_sum)
-    if r == want[0]:
+    rgi = np.random.randint(0,w_sum)
+    if rgi == want[0]:
         g = nx.cycle_graph(num_v)
-    elif r == want[1]:
+    elif rgi == want[1]:
         g = nx.star_graph(num_v - 1)
-    elif r == want[2]:
+    elif rgi == want[2]:
         g = nx.wheel_graph(num_v)
-    elif r == want[3]:
+    elif rgi == want[3]:
         g = nx.complete_graph(num_v)
-    elif r == want[4]:
+    elif rgi == want[4]:
         path_len = np.random.randint(2, num_v // 2)
         g = nx.lollipop_graph(m=num_v - path_len, n=path_len)
-    elif r == want[5]:
+    elif rgi == want[5]:
         g = nx.hypercube_graph(np.log2(num_v).astype('int'))
         g = nx.convert_node_labels_to_integers(g)
-    elif r == want[6]:
+    elif rgi == want[6]:
         g = nx.circular_ladder_graph(num_v // 2)
-    elif r == want[7]:
+    elif rgi == want[7]:
         n_rows = np.random.randint(2, num_v // 2)
         n_cols = num_v // n_rows
         g = nx.grid_graph([n_rows, n_cols])
@@ -274,26 +287,26 @@ def nx_graph(num_v, want):
     
     A = nx.adjacency_matrix(g)
     A = A + np.eye(A.shape[0])
-    A_hat = localpooling_filter(A)
+    Atld = localpooling_filter(A)
     X = np.eye(A.shape[0])
     # X = X.reshape(X.shape[0],X.shape[1],1)
-    return A, A_hat, X, r
+    return A, Atld, X, rgi
 
 def gen_nx_graphs(batch=100, want=[1,1,1,1,1,1,1,1],minN=6,maxN=10):
     while True:
-        A_hat_list = []
+        Atld_list = []
         A_list = []
         X_list = []
         C_list = []
         gen_v = np.random.randint(minN, maxN,batch)
         maxN = 0
         for num_v in gen_v:
-            A, A_hat, X, C = nx_graph(num_v, want)
+            A, Atld, X, C = nx_graph(num_v, want)
             if maxN < A.shape[0]:
                 maxN = A.shape[0]
             A_list.append(A)
 
-            A_hat_list.append(A_hat)
+            Atld_list.append(Atld)
             X_list.append(X)
 
             C_list.append(C)
@@ -311,38 +324,38 @@ def gen_nx_graphs(batch=100, want=[1,1,1,1,1,1,1,1],minN=6,maxN=10):
 
 
         X, A = numpy_to_batch(X_list, A_list)
-        _, A_hat = numpy_to_batch(X_list, A_hat_list)
+        _, Atld = numpy_to_batch(X_list, Atld_list)
         A = np.array(A)
-        A_hat = np.array(A_hat)
-        yield X, A, A_hat, C_list
+        Atld = np.array(Atld)
+        yield X, A, Atld, C_list
 
 def gen_nx_random_uncycle_graphs():
     batch = 1000
     while True:
-        A_hat_list = []
+        Atld_list = []
         A_list = []
         X_list = []
         gen_v = np.random.randint(5, 10,batch)
         for num_v in gen_v:
             r_choice = np.random.randint(2)
             if r_choice == 0:
-                A, A_hat, X = nx_graph(num_v)
+                A, Atld, X = nx_graph(num_v)
             else:
-                A, A_hat, X = random_uncycle_graph(num_v)
+                A, Atld, X = random_uncycle_graph(num_v)
             A_list.append(A)
-            A_hat_list.append(A_hat)
+            Atld_list.append(Atld)
             X_list.append(X)
 
         X, A = numpy_to_batch(X_list, A_list)
-        _, A_hat = numpy_to_batch(X_list, A_hat_list)
+        _, Atld = numpy_to_batch(X_list, Atld_list)
         A = A.toarray()
-        A_hat = A_hat.toarray()
-        yield A, A_hat, X
+        Atld = Atld.toarray()
+        yield A, Atld, X
 
 
 def list2graph(nodelist, maxN=None):
     A_list = []
-    A_hat_list = []
+    Atld_list = []
     X_list = []
 
     for elements in nodelist:
@@ -350,26 +363,26 @@ def list2graph(nodelist, maxN=None):
         a = adjacency_matrix(g,sorted(g.nodes())).toarray()
         i = np.eye(a.shape[0])
         a = a + i
-        a_hat = localpooling_filter(a)
+        a_tld = localpooling_filter(a)
         x = np.eye(a.shape[0])
         A_list.append(a)
-        A_hat_list.append(a_hat)
+        Atld_list.append(a_tld)
         X_list.append(x)
     
     X, A = numpy_to_batch(X_list, A_list)
-    _, A_hat = numpy_to_batch(X_list, A_hat_list)
+    _, Atld = numpy_to_batch(X_list, Atld_list)
 
     X = tf.cast(X,tf.float32)
     A = tf.cast(A,tf.float32)
-    A_hat = tf.cast(A_hat,tf.float32)
+    Atld = tf.cast(Atld,tf.float32)
 
     if maxN is None:
-        return X, A, A_hat
+        return X, A, Atld
     elif maxN <= X.shape[1]:
         X = X[:, :maxN, :maxN]
         A = A[:, :maxN, :maxN]
-        A_hat = A_hat[:, :maxN, :maxN]
-        return X, A, A_hat
+        Atld = Atld[:, :maxN, :maxN]
+        return X, A, Atld
     else:
         left_pad = tf.zeros((X.shape[0], X.shape[1], maxN - X.shape[2]))
         bottom_pad = tf.zeros((X.shape[0], maxN- X.shape[1], maxN))
@@ -380,9 +393,9 @@ def list2graph(nodelist, maxN=None):
         A = tf.concat([A,left_pad],axis=2)
         A = tf.concat([A, bottom_pad],axis=1)
 
-        A_hat = tf.concat([A_hat,left_pad],axis=2)
-        A_hat = tf.concat([A_hat, bottom_pad],axis=1)
-        return X, A, A_hat
+        Atld = tf.concat([Atld,left_pad],axis=2)
+        Atld = tf.concat([Atld, bottom_pad],axis=1)
+        return X, A, Atld
 
 
 def graphs_stats(Adjs):
@@ -417,3 +430,4 @@ def graphs_stats(Adjs):
             if maxd > maxD:
                 maxD = maxd
     return maxD, depth_dist, maxDs, edgesN
+

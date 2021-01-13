@@ -431,3 +431,36 @@ def graphs_stats(Adjs):
                 maxD = maxd
     return maxD, depth_dist, maxDs, edgesN
 
+
+def history_figure(history, figsize=(16,8), legend_fontsize=18, axes_label_fondsize=22,ticks_fontsize=16,markersize=15, save_obj=None):
+    max_harm = np.max(history["harmonic_score"])
+    max_harm_arg = np.argmax(history["harmonic_score"])
+
+    plt.figure(figsize=figsize)
+    plt.subplot(1,2,1)
+    plt.plot(history["train_cost"],label=r"$train \, cost \, (seen)$")
+    plt.plot(history["val_cost"],label=r"$val \, cost \, (seen)$")
+    plt.plot(history["test_cost"],label=r"$test \, cost \, (unseen)$")
+    plt.xlabel(r"$epochs \, \#$", fontsize=axes_label_fondsize)
+    plt.ylabel(r"$Cost$", fontsize=axes_label_fondsize)
+    plt.legend(fontsize=legend_fontsize)
+    plt.xticks(fontsize=ticks_fontsize)
+    plt.yticks(fontsize=ticks_fontsize)
+
+    plt.subplot(1,2,2)
+    plt.plot(history["train_score"],label=r"$train \, score \, (seen)$")
+    plt.plot(history["val_score"],label=r"$val \, score \, (seen)$")
+    plt.plot(history["test_score"],label=r"$test \, score \, (unseen)$")
+    plt.plot(history["harmonic_score"],label=r"$harmonic \, score$")
+    plt.plot(max_harm_arg,max_harm,'*',label=r'$harmonic \, score \, (best)$', markersize=15)
+    plt.xlabel(r"$epochs \, \#$", fontsize=axes_label_fondsize)
+    plt.ylabel(r"$Accuracy \, Score$", fontsize=axes_label_fondsize)
+    plt.legend(fontsize=legend_fontsize)
+    plt.xticks(fontsize=ticks_fontsize)
+    plt.yticks(fontsize=ticks_fontsize)
+
+    print('Harmonic Score (Best): {}'.format(max_harm))
+    print('Val Score (Hs Best):', history["val_score"][max_harm_arg])
+    print('Test Score (Hs Best):', history["test_score"][max_harm_arg])
+    if save_obj is not None:
+        plt.savefig('./{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')

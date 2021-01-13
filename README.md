@@ -6,3 +6,5 @@
 - set up all files structure
 - fix .gitignore to ignore DataFigures
 - ~~set privet epochs counting var (dynamic)~~
+- add Extended NN
+- create BaseModel ?!

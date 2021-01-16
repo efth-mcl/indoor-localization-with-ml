@@ -6,16 +6,11 @@ import numpy as np
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
-from .methods import list2graph
+from .methods import list2graph, myeye
 
-TRAIN_PATHS = [
-    "train_data.json",
-]
+TRAIN_PATH =  "train_data.json"
 
-TEST_PATHS = [
-    "test_data.json",
-
-]
+TEST_PATH = "test_data.json"
 
 
 GAE_dataset ={
@@ -29,6 +24,15 @@ GAE_dataset ={
     ]]
 }
 
+SGAE_dataset ={
+    'Labels': ['moving_divice', 'static0', 'static1', 'static2', 'static3'],
+    'route_links': [[
+        [0,1],
+        [0,2],
+        [0,3],
+        [0,4]
+    ]]
+}
 
 class GaeDataset(object):
     def __init__(self):
@@ -40,16 +44,17 @@ class GaeDataset(object):
 
 
 class ZeroShotDataset(object):
-    def __init__(self, embs_id):
+    def __init__(self, embs_id, pathroot='..'):
        self.__a_mlb = MultiLabelBinarizer()
        self.__r_lb = LabelBinarizer()
-       self.__r_emb_dict = np.load('../data/gae/gae-node-embs{}.npy'.format(embs_id), allow_pickle=True)[()]
+       self.__pathroot = pathroot
+       self.__r_emb_dict = np.load('{}/data/gae/gae-node-embs{}.npy'.format(self.__pathroot, embs_id), allow_pickle=True)[()]
 
-    def load_data(self, train_paths, test_paths, seen_labels, unseen_labels):
+    def load_data(self, seen_labels, unseen_labels):
 
-        self.__x_train, self.__r_emb_train, self.__r_train, self.__a_train = self.__load_data(train_paths[0], seen_labels)
-        self.__x_val, self.__r_emb_val, self.__r_val, self.__a_val = self.__load_data(test_paths[0], seen_labels)
-        self.__x_test, self.__r_emb_test, self.__r_test, self.__a_test = self.__load_merge_data(train_paths[0], test_paths[0], unseen_labels)
+        self.__x_train, self.__r_emb_train, self.__r_train, self.__a_train = self.__load_data(TRAIN_PATH, seen_labels)
+        self.__x_val, self.__r_emb_val, self.__r_val, self.__a_val = self.__load_data(TEST_PATH, seen_labels)
+        self.__x_test, self.__r_emb_test, self.__r_test, self.__a_test = self.__load_merge_data(TRAIN_PATH, TEST_PATH, unseen_labels)
 
         avg = np.mean(self.__x_train)
         std = np.std(self.__x_train)
@@ -110,7 +115,7 @@ class ZeroShotDataset(object):
     
     def __load_file(self, path, labels):
             # read file
-            with open('../data/dataset/'+path, 'r') as json_file:
+            with open('{}/data/dataset/{}'.format(self.__pathroot, path), 'r') as json_file:
                 raw_data=json_file.read()
 
             # parse file
@@ -148,8 +153,81 @@ class ZeroShotDataset(object):
     
     def get_a_onehot_from_labels(self, labels):
         return self.__a_mlb.transform(labels)
+    
+    def get_datatset(self):
+        return (self.__x_train, self.__r_emb_train, self.__r_train, self.__a_train), (self.__x_val, self.__r_emb_val, self.__r_val, self.__a_val), (self.__x_test, self.__r_emb_test, self.__r_test, self.__a_test)
 
 
+
+class ENNdataset(ZeroShotDataset):
+    def __init__(self, embid='32', pathroot='..', seen_labels=['0', '2'], unseen_labels=['1']):
+        super(ENNdataset, self).__init__(embid, pathroot)
+        self.load_data(seen_labels, unseen_labels)
+        X, A, Atld = list2graph(SGAE_dataset['route_links'])
+        Xpr = self.Pr0(Atld, X)
+        # Xpr = tf.cast(Xpr, tf.float32)
+        # Atld = tf.cast(Atld, tf.float32)
+        # A = tf.cast(A, tf.float32)
+
+        (self.__x_train, self.__r_emb_train, self.__r_train, self.__a_train), (self.__x_val, self.__r_emb_val, self.__r_val, self.__a_val), (self.__x_test, self.__r_emb_test, self.__r_test, self.__a_test) = super(ENNdataset, self).get_datatset()
+
+        Ntrian = self.__x_train.shape[0]
+        self.__X_train = np.concatenate(Ntrian*[Xpr],axis=0)
+        self.__Atld_train = np.concatenate(Ntrian*[Atld], axis=0)
+        self.__A_train = np.concatenate(Ntrian*[A],axis=0)
+        Nval = self.__x_val.shape[0]
+        self.__X_val = np.concatenate(Nval*[Xpr],axis=0)
+        self.__Atld_val = np.concatenate(Nval*[Atld], axis=0)
+        self.__A_val = np.concatenate(Nval*[A],axis=0)
+        Ntest =self.__x_test.shape[0]
+        self.__X_test = np.concatenate(Ntest*[Xpr],axis=0)
+        self.__Atld_test = np.concatenate(Ntest*[Atld], axis=0)
+        self.__A_test = np.concatenate(Ntest*[A],axis=0)
+
+        self.train = tf.data.Dataset.from_tensor_slices((
+            tf.cast(self.__X_train, tf.float32),
+            tf.cast(self.__Atld_train, tf.float32),
+            tf.cast(self.__x_train, tf.float32),
+            tf.cast(self.__A_train, tf.float32),
+            tf.cast(self.__r_emb_train, tf.float32),
+            tf.cast(self.__r_train, tf.int8),
+            tf.cast(self.__a_train, tf.int8)
+        )).batch(128)
+
+        self.val = tf.data.Dataset.from_tensor_slices((
+            tf.cast(self.__X_val, tf.float32),
+            tf.cast(self.__Atld_val, tf.float32),
+            tf.cast(self.__x_val, tf.float32),
+            tf.cast(self.__A_val, tf.float32),
+            tf.cast(self.__r_emb_val, tf.float32),
+            tf.cast(self.__r_val, tf.int8),
+            tf.cast(self.__a_val, tf.int8)
+        )).batch(128)
+
+        self.test = tf.data.Dataset.from_tensor_slices((
+            tf.cast(self.__X_test, tf.float32),
+            tf.cast(self.__Atld_test, tf.float32),
+            tf.cast(self.__x_test, tf.float32),
+            tf.cast(self.__A_test, tf.float32),
+            tf.cast(self.__r_emb_test, tf.float32),
+            tf.cast(self.__r_test, tf.int8),
+            tf.cast(self.__a_test, tf.int8)
+        )).batch(128)
+
+
+    def get_datatset(self):
+        return (self.__X_train, self.__Atld_train, self.__x_train, self.__A_train, self.__r_emb_train, self.__r_train, self.__a_train
+        ), (self.__X_val, self.__Atld_val, self.__x_val, self.__A_val, self.__r_emb_val, self.__r_val, self.__a_val
+            ), (self.__X_test, self.__Atld_test, self.__x_test, self.__A_test, self.__r_emb_test, self.__r_test, self.__a_test
+            )
+    
+    def Pr0(self, Atld, X):
+        I0 = myeye(Atld.shape[0])
+        I2 = myeye(Atld.shape[2])
+        Xpr = tf.tensordot(I0, Atld, [[1],[0]])
+        Xpr = tf.tensordot(Xpr, I2, [[3],[1]])
+        Xpr = tf.tensordot(Xpr, X, [[1,4],[0,1]])
+        return Xpr
 #-------------------------------#
 #- Pre codes -------------------#
 #-------------------------------#

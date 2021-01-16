@@ -6,5 +6,7 @@
 - set up all files structure
 - fix .gitignore to ignore DataFigures
 - ~~set privet epochs counting var (dynamic)~~
-- add Extended NN
+- ~~add Extended NN~~
 - create BaseModel ?!
+- modify methods.{print_confmtx, pca_denoising_preprocessing} to be general for other data classes
+- modify methods.py functions to classes (per comments !?)

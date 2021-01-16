@@ -5,14 +5,19 @@ import numpy as np
 import tensorflow as tf
 import time
 from spektral.utils import localpooling_filter
-from spektral.utils.data import numpy_to_batch
+from spektral.utils.data import numpy_to_batch, numpy_to_disjoint
 from networkx import Graph, adjacency_matrix
 import networkx as nx
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from itertools import product
+from sklearn.decomposition import PCA
+from sklearn.neighbors import KNeighborsClassifier
+import matplotlib as mlb
 
-
+# ---------------------- #
+# routing -------------- #
+# ---------------------- #
 class Iperf3Out:
     
     def __init__(self, **entries):
@@ -206,6 +211,9 @@ def full_mesurment_to_tf(secs_before_start_mesure=5):
     return tensor
 
 
+# ---------------------- #
+# graphs --------------- #
+# ---------------------- #
 def A2G(a):
     W = np.where(a-np.eye(a.shape[1])==1)
     W = list(zip(W[0].tolist(),W[1].tolist()))
@@ -292,6 +300,7 @@ def nx_graph(num_v, want):
     # X = X.reshape(X.shape[0],X.shape[1],1)
     return A, Atld, X, rgi
 
+
 def gen_nx_graphs(batch=100, want=[1,1,1,1,1,1,1,1],minN=6,maxN=10):
     while True:
         Atld_list = []
@@ -320,14 +329,13 @@ def gen_nx_graphs(batch=100, want=[1,1,1,1,1,1,1,1],minN=6,maxN=10):
             x = np.concatenate([x, bottom_pad],axis=0)
             X_list[i] = x
         
-        
-
 
         X, A = numpy_to_batch(X_list, A_list)
         _, Atld = numpy_to_batch(X_list, Atld_list)
         A = np.array(A)
         Atld = np.array(Atld)
         yield X, A, Atld, C_list
+
 
 def gen_nx_random_uncycle_graphs():
     batch = 1000
@@ -431,7 +439,9 @@ def graphs_stats(Adjs):
                 maxD = maxd
     return maxD, depth_dist, maxDs, edgesN
 
-
+# ---------------------- #
+# neural networks ------ #
+# ---------------------- #
 def history_figure(history, figsize=(16,8), legend_fontsize=18, axes_label_fondsize=22,ticks_fontsize=16,markersize=15, save_obj=None):
     max_harm = np.max(history["harmonic_score"])
     max_harm_arg = np.argmax(history["harmonic_score"])
@@ -463,4 +473,134 @@ def history_figure(history, figsize=(16,8), legend_fontsize=18, axes_label_fonds
     print('Val Score (Hs Best):', history["val_score"][max_harm_arg])
     print('Test Score (Hs Best):', history["test_score"][max_harm_arg])
     if save_obj is not None:
-        plt.savefig('./{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')
+        plt.savefig('{}/{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')
+    else:
+        plt.show()
+
+
+# only for ENN fix for all maybe use self.__status @property
+def print_confmtx(model, dataset, lerninfo):
+    """
+    docstring
+    """
+    def confmtx(y, yhat):
+        """
+        docstring
+        """
+        confmtx = np.zeros((y.shape[1], y.shape[1]))  
+        y = np.argmax(y,axis=1)
+        yhat = np.argmax(yhat,axis=1)
+        y_concat = np.concatenate([y.reshape(-1,1),yhat.reshape(-1,1)],axis=1)
+
+        for y1, y2 in y_concat:
+            confmtx[y1,y2]+=1
+
+        return confmtx
+    
+    (A_train, r_train, a_train, p_train), (A_val, r_val, a_val, p_val), (A_test, r_test, a_test, p_test) = model.get_results(dataset, True)
+
+
+    la = [[a_train, p_train[2]], [a_val, p_val[2]], [ a_test, p_test[2]]]
+    lr = [[r_train, p_train[1]], [r_val, p_val[1]], [ r_test, p_test[1]]]
+
+
+    print('a', lerninfo)
+    for expl, (tr, pr) in zip(['train', 'val', 'test'], la):
+        print(expl)
+        print(confmtx(tr, pr))
+
+    print('r', lerninfo) 
+    for expl, (tr, pr) in zip(['train', 'val', 'test'], lr):
+        print(expl)
+        print(confmtx(tr, pr))
+
+
+def sift_point_to_best(best_point, point, sift_dist):
+    dist = np.sqrt(np.sum((point-best_point)**2))
+    a = sift_dist/dist
+    new_point = np.array([
+        point[0]*a+(1-a)*best_point[0],
+        point[1]*a+(1-a)*best_point[1]
+        ])
+    return new_point[0], new_point[1]
+
+
+def pca_denoising(p_expls, pca_emb, pca_expls, knn, knn_pca, Dx=0, Dy=1):
+    
+
+    diferent_cls_ts = np.where(knn_pca.kneighbors(pca_expls[:,[Dx, Dy]])[1] != knn.kneighbors(p_expls)[1])[0]
+    knn_n = knn.kneighbors(p_expls)[1]
+    for ii in diferent_cls_ts:
+        sift_dist = knn_pca.kneighbors(pca_expls[:,[Dx, Dy]])[0][ii][0]
+        
+        x, y = sift_point_to_best(pca_emb[knn_n[ii][0],[Dx, Dy]], pca_expls[ii,[Dx, Dy]], sift_dist)
+        pca_expls[ii, Dx] = x
+        pca_expls[ii, Dy] = y
+
+    return pca_expls
+
+# Z is true Embeddings
+def pca_denoising_preprocessing(model, dataset, Z, Y):
+    (_, _, _, p_train), (_, _, _, p_val), (_, _, _, p_test) = model.get_results(dataset, False)
+
+    pca = PCA(n_components=2)
+    pca.fit(Z)
+    
+    pca_emb = pca.transform(Z)
+    pca_vl = pca.transform(p_val[1])
+    pca_ts = pca.transform(p_test[1])
+
+    Dx = 0
+    Dy = 1
+    # :3 means up to room 2, change it to be more general
+    knn_pca = KNeighborsClassifier(1)
+    knn_pca.fit(pca_emb[:3,[Dx, Dy]], Y)
+
+
+    pca_vl = pca_denoising(p_val[1], pca_emb, pca_vl, model.knn, knn_pca)
+    pca_ts = pca_denoising(p_test[1], pca_emb, pca_ts, model.knn, knn_pca)
+
+    return pca_vl ,pca_ts, pca_emb, knn_pca
+
+def pca_denoising_figure(pca_vl ,pca_ts, pca_emb, knn_pca, Zlabels, save_obj=None):
+    mlb.style.use('default')
+    dpi = 100
+    xmin = np.min(pca_emb[:,0])
+    xmin += np.sign(xmin)
+    xmax = np.max(pca_emb[:,0])
+    xmax += np.sign(xmax)
+    ymin = np.min(pca_emb[:,1])
+    ymin += np.sign(ymin)
+    ymax = np.max(pca_emb[:,1])
+    ymax += np.sign(ymax)
+
+    
+    xlin = np.linspace(xmin,xmax,dpi)
+    ylin = np.linspace(ymin,ymax,dpi)
+    xx, yy = np.meshgrid(ylin, ylin)
+    knn_space = np.argmax(knn_pca.predict(np.c_[xx.ravel(), yy.ravel()]),axis=1)
+    knn_space = knn_space.reshape(xx.shape)
+
+    Dx = 0
+    Dy = 1
+
+    fig, ax = plt.subplots(figsize=(10,5))
+    plt.plot(pca_emb[:3,Dx],pca_emb[:3,Dy],'o',label='embs', markersize=15)
+    plt.plot(pca_vl[:,Dx],pca_vl[:,Dy],'*',label='val', markersize=10)
+    plt.plot(pca_ts[:,Dx],pca_ts[:,Dy],'*',label='test', markersize=10)
+
+    for (v,l) in zip(pca_emb, Zlabels[:3]):
+        plt.text(v[Dx],v[Dy],l, fontsize=20)
+
+    ax.contourf(xx, yy, knn_space, cmap=plt.get_cmap('tab20c'), levels=2)
+    plt.legend()
+    if save_obj is not None:
+        plt.savefig('{}/{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')
+    else:
+        plt.show()
+
+
+def myeye(N):
+    return tf.cast([[[1 if i==j and j==w  else 0 for i in range(N)] for j in range(N)] for w in range(N)], tf.float32)
+
+

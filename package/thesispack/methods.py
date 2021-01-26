@@ -439,39 +439,49 @@ def graphs_stats(Adjs):
                 maxD = maxd
     return maxD, depth_dist, maxDs, edgesN
 
+
 # ---------------------- #
 # neural networks ------ #
 # ---------------------- #
 def history_figure(history, figsize=(16,8), legend_fontsize=18, axes_label_fondsize=22,ticks_fontsize=16,markersize=15, save_obj=None):
-    max_harm = np.max(history["harmonic_score"])
-    max_harm_arg = np.argmax(history["harmonic_score"])
 
+    zstype = lambda ksplit0: '(seen)' if ksplit0 in ['train', 'val'] else '(unseen)'
+    def score_cost_plot(plot_type='cost'):
+        for k, hasv in hasattr_list:
+            ksplit = k.split('_')
+            if hasv and ksplit[1] == plot_type:
+                zs = zstype(ksplit[0])
+                klabel = ' \, '.join(ksplit)
+                label = '{} \, {}'.format(klabel, zs)
+                plt.plot(history[k],label=r'${}$'.format(label))
+
+        if plot_type == 'score':
+            try:
+                plt.plot(history["harmonic_score"],label=r"$harmonic \, score$")
+                max_harm = np.max(history["harmonic_score"])
+                max_harm_arg = np.argmax(history["harmonic_score"])
+                plt.plot(max_harm_arg,max_harm,'*',label=r'$harmonic \, score \, (best)$', markersize=15, color='tab:purple')
+                print('Harmonic Score (Best): {}'.format(max_harm))
+                print('Val Score (Hs Best):', history["val_score"][max_harm_arg])
+                print('Test Score (Hs Best):', history["test_score"][max_harm_arg])
+            except:
+                pass
+
+
+        plt.xlabel(r"$\# \, of \, epochs$", fontsize=axes_label_fondsize)
+        plt.ylabel(r'${}$'.format(plot_type), fontsize=axes_label_fondsize)
+        plt.legend(fontsize=legend_fontsize)
+        plt.xticks(fontsize=ticks_fontsize)
+        plt.yticks(fontsize=ticks_fontsize)
+
+    hasattr_list = [(k, any(v)) for k, v in history.items() if k != "harmonic_score"]
     plt.figure(figsize=figsize)
     plt.subplot(1,2,1)
-    plt.plot(history["train_cost"],label=r"$train \, cost \, (seen)$")
-    plt.plot(history["val_cost"],label=r"$val \, cost \, (seen)$")
-    plt.plot(history["test_cost"],label=r"$test \, cost \, (unseen)$")
-    plt.xlabel(r"$epochs \, \#$", fontsize=axes_label_fondsize)
-    plt.ylabel(r"$Cost$", fontsize=axes_label_fondsize)
-    plt.legend(fontsize=legend_fontsize)
-    plt.xticks(fontsize=ticks_fontsize)
-    plt.yticks(fontsize=ticks_fontsize)
-
+    score_cost_plot('cost')
     plt.subplot(1,2,2)
-    plt.plot(history["train_score"],label=r"$train \, score \, (seen)$")
-    plt.plot(history["val_score"],label=r"$val \, score \, (seen)$")
-    plt.plot(history["test_score"],label=r"$test \, score \, (unseen)$")
-    plt.plot(history["harmonic_score"],label=r"$harmonic \, score$")
-    plt.plot(max_harm_arg,max_harm,'*',label=r'$harmonic \, score \, (best)$', markersize=15)
-    plt.xlabel(r"$epochs \, \#$", fontsize=axes_label_fondsize)
-    plt.ylabel(r"$Accuracy \, Score$", fontsize=axes_label_fondsize)
-    plt.legend(fontsize=legend_fontsize)
-    plt.xticks(fontsize=ticks_fontsize)
-    plt.yticks(fontsize=ticks_fontsize)
+    score_cost_plot('score')
 
-    print('Harmonic Score (Best): {}'.format(max_harm))
-    print('Val Score (Hs Best):', history["val_score"][max_harm_arg])
-    print('Test Score (Hs Best):', history["test_score"][max_harm_arg])
+
     if save_obj is not None:
         plt.savefig('{}/{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')
     else:
@@ -479,7 +489,7 @@ def history_figure(history, figsize=(16,8), legend_fontsize=18, axes_label_fonds
 
 
 # only for ENN fix for all maybe use self.__status @property
-def print_confmtx(model, dataset, lerninfo):
+def print_confmtx(model, dataset, lerninfo:str, indexes_list:list):
     """
     docstring
     """
@@ -497,11 +507,19 @@ def print_confmtx(model, dataset, lerninfo):
 
         return confmtx
     
-    (A_train, r_train, a_train, p_train), (A_val, r_val, a_val, p_val), (A_test, r_test, a_test, p_test) = model.get_results(dataset, True)
+    
+    (_, outs_tr, p_train), (_, outs_vl, p_val), (_, outs_ts, p_test) = model.get_results(dataset, True)
+    
+    indxr = indexes_list[0]
+    indxa = indexes_list[1]
+
+    (r_train, a_train) = outs_tr[indxr], outs_tr[indxa]
+    (r_val, a_val) = outs_vl[indxr], outs_vl[indxa]
+    (r_test, a_test) = outs_ts[indxr], outs_ts[indxa]
 
 
-    la = [[a_train, p_train[2]], [a_val, p_val[2]], [ a_test, p_test[2]]]
-    lr = [[r_train, p_train[1]], [r_val, p_val[1]], [ r_test, p_test[1]]]
+    lr = [[r_train, p_train[indxr]], [r_val, p_val[indxr]], [ r_test, p_test[indxr]]]
+    la = [[a_train, p_train[indxa]], [a_val, p_val[indxa]], [ a_test, p_test[indxa]]]
 
 
     print('a', lerninfo)
@@ -527,7 +545,6 @@ def sift_point_to_best(best_point, point, sift_dist):
 
 def pca_denoising(p_expls, pca_emb, pca_expls, knn, knn_pca, Dx=0, Dy=1):
     
-
     diferent_cls_ts = np.where(knn_pca.kneighbors(pca_expls[:,[Dx, Dy]])[1] != knn.kneighbors(p_expls)[1])[0]
     knn_n = knn.kneighbors(p_expls)[1]
     for ii in diferent_cls_ts:
@@ -540,15 +557,15 @@ def pca_denoising(p_expls, pca_emb, pca_expls, knn, knn_pca, Dx=0, Dy=1):
     return pca_expls
 
 # Z is true Embeddings
-def pca_denoising_preprocessing(model, dataset, Z, Y):
-    (_, _, _, p_train), (_, _, _, p_val), (_, _, _, p_test) = model.get_results(dataset, False)
+def pca_denoising_preprocessing(model, dataset, Z, Y, embidx=0):
+    (_, _, p_train), (_, _, p_val), (_, _, p_test) = model.get_results(dataset, False)
 
     pca = PCA(n_components=2)
     pca.fit(Z)
     
     pca_emb = pca.transform(Z)
-    pca_vl = pca.transform(p_val[1])
-    pca_ts = pca.transform(p_test[1])
+    pca_vl = pca.transform(p_val[embidx])
+    pca_ts = pca.transform(p_test[embidx])
 
     Dx = 0
     Dy = 1
@@ -557,8 +574,8 @@ def pca_denoising_preprocessing(model, dataset, Z, Y):
     knn_pca.fit(pca_emb[:3,[Dx, Dy]], Y)
 
 
-    pca_vl = pca_denoising(p_val[1], pca_emb, pca_vl, model.knn, knn_pca)
-    pca_ts = pca_denoising(p_test[1], pca_emb, pca_ts, model.knn, knn_pca)
+    pca_vl = pca_denoising(p_val[embidx], pca_emb, pca_vl, model.knn, knn_pca)
+    pca_ts = pca_denoising(p_test[embidx], pca_emb, pca_ts, model.knn, knn_pca)
 
     return pca_vl ,pca_ts, pca_emb, knn_pca
 
@@ -574,7 +591,6 @@ def pca_denoising_figure(pca_vl ,pca_ts, pca_emb, knn_pca, Zlabels, save_obj=Non
     ymax = np.max(pca_emb[:,1])
     ymax += np.sign(ymax)
 
-    
     xlin = np.linspace(xmin,xmax,dpi)
     ylin = np.linspace(ymin,ymax,dpi)
     xx, yy = np.meshgrid(ylin, ylin)
@@ -600,7 +616,7 @@ def pca_denoising_figure(pca_vl ,pca_ts, pca_emb, knn_pca, Zlabels, save_obj=Non
         plt.show()
 
 
-def myeye(N):
+def n_identity_matrix(N):
     return tf.cast([[[1 if i==j and j==w  else 0 for i in range(N)] for j in range(N)] for w in range(N)], tf.float32)
 
 

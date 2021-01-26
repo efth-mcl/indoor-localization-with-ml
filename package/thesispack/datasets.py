@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
-from .methods import list2graph, myeye
+from .methods import list2graph, n_identity_matrix
 
 TRAIN_PATH =  "train_data.json"
 
@@ -165,9 +165,6 @@ class ENNdataset(ZeroShotDataset):
         self.load_data(seen_labels, unseen_labels)
         X, A, Atld = list2graph(SGAE_dataset['route_links'])
         Xpr = self.Pr0(Atld, X)
-        # Xpr = tf.cast(Xpr, tf.float32)
-        # Atld = tf.cast(Atld, tf.float32)
-        # A = tf.cast(A, tf.float32)
 
         (self.__x_train, self.__r_emb_train, self.__r_train, self.__a_train), (self.__x_val, self.__r_emb_val, self.__r_val, self.__a_val), (self.__x_test, self.__r_emb_test, self.__r_test, self.__a_test) = super(ENNdataset, self).get_datatset()
 
@@ -188,7 +185,9 @@ class ENNdataset(ZeroShotDataset):
             tf.cast(self.__X_train, tf.float32),
             tf.cast(self.__Atld_train, tf.float32),
             tf.cast(self.__x_train, tf.float32),
+
             tf.cast(self.__A_train, tf.float32),
+
             tf.cast(self.__r_emb_train, tf.float32),
             tf.cast(self.__r_train, tf.int8),
             tf.cast(self.__a_train, tf.int8)
@@ -198,7 +197,9 @@ class ENNdataset(ZeroShotDataset):
             tf.cast(self.__X_val, tf.float32),
             tf.cast(self.__Atld_val, tf.float32),
             tf.cast(self.__x_val, tf.float32),
+
             tf.cast(self.__A_val, tf.float32),
+
             tf.cast(self.__r_emb_val, tf.float32),
             tf.cast(self.__r_val, tf.int8),
             tf.cast(self.__a_val, tf.int8)
@@ -208,7 +209,9 @@ class ENNdataset(ZeroShotDataset):
             tf.cast(self.__X_test, tf.float32),
             tf.cast(self.__Atld_test, tf.float32),
             tf.cast(self.__x_test, tf.float32),
+
             tf.cast(self.__A_test, tf.float32),
+
             tf.cast(self.__r_emb_test, tf.float32),
             tf.cast(self.__r_test, tf.int8),
             tf.cast(self.__a_test, tf.int8)
@@ -222,12 +225,14 @@ class ENNdataset(ZeroShotDataset):
             )
     
     def Pr0(self, Atld, X):
-        I0 = myeye(Atld.shape[0])
-        I2 = myeye(Atld.shape[2])
+        I0 = n_identity_matrix(Atld.shape[0])
+        I2 = n_identity_matrix(Atld.shape[2])
         Xpr = tf.tensordot(I0, Atld, [[1],[0]])
         Xpr = tf.tensordot(Xpr, I2, [[3],[1]])
         Xpr = tf.tensordot(Xpr, X, [[1,4],[0,1]])
         return Xpr
+
+
 #-------------------------------#
 #- Pre codes -------------------#
 #-------------------------------#

@@ -7,8 +7,12 @@ from sklearn.neighbors import KNeighborsClassifier
 import numpy as np
 import copy
 from functools import partial
-from .methods import myeye
+from .methods import n_identity_matrix
 
+
+global LAMDA, EQ1
+EQ1 = False
+LAMDA = 1e-2
 # 0 input
 # 1 output loss
 # 2 output mtr
@@ -89,49 +93,48 @@ class LossBase(MetricLossBase):
 
 class WeightedCrossEntropyLogitsMetric(tf.keras.metrics.Metric):
 
-  def __init__(self, w_p, lamda=1):
+  def __init__(self, w_p):
     super(WeightedCrossEntropyLogitsMetric, self).__init__(name='weighted_cross_entropy_with_logits')
     self.__loss = partial(tf.nn.weighted_cross_entropy_with_logits,pos_weight=w_p)
-    self.__lamda = lamda
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
 
   def update_state(self, y_true, y_pred, sample_weight=None):
-    self.__losssum.assign_add(tf.reduce_sum(self.__loss(y_true, y_pred)))
+    self.__losssum.assign_add(tf.reduce_mean(self.__loss(y_true, y_pred)))
 
   def result(self):
-    return self.__lamda*self.__losssum
+    return self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
 
-class L2MeanSquaredError(tf.keras.metrics.Metric):
+class MeanSquaredError(tf.keras.metrics.Metric):
   def __init__(self):
-    super(L2MeanSquaredError, self).__init__(name='l2mse')
+    super(MeanSquaredError, self).__init__(name='l2mse')
     self.__loss = tf.keras.metrics.MeanSquaredError()
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
 
   def update_state(self, y_true, y_pred):
     l2loss = self.__loss(y_true, y_pred)
-    self.__losssum.assign_add(tf.reduce_sum(l2loss))
+    self.__losssum.assign_add(tf.reduce_mean(l2loss))
 
   def result(self):
-    return self.__losssum*1e-5
+    return LAMDA*self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
 
-class L2CategoricalCrossentropy(tf.keras.metrics.Metric):
+class CategoricalCrossentropy(tf.keras.metrics.Metric):
   def __init__(self):
-    super(L2CategoricalCrossentropy, self).__init__(name='l2cce')
+    super(CategoricalCrossentropy, self).__init__(name='l2cce')
     self.__loss = tf.keras.metrics.CategoricalCrossentropy()
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
 
   def update_state(self, y_true, y_pred):
-    l2loss = self.__loss(y_true, y_pred)**2
-    self.__losssum.assign_add(tf.reduce_sum(l2loss))
+    l2loss = self.__loss(y_true, y_pred)
+    self.__losssum.assign_add(tf.reduce_mean(l2loss))
 
   def result(self):
-    return 1/2*self.__losssum
+    return LAMDA*self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
@@ -172,9 +175,13 @@ class EarlyStoping(object):
 
 
 class Trainer(object):
-  def __init__(self, early_stop_vars=None, save_weights_obj=None, learning_rate=1e-4, amsgrad=True):
-    # self.__optimizer = Adam(learning_rate=learning_rate, amsgrad=amsgrad)
-    self.__optimizer = SGD(learning_rate)
+  def __init__(self, early_stop_vars=None, save_weights_obj=None, learning_rate=1e-4):
+    self.__optimizer = SGD(learning_rate, momentum=0.98)
+
+    # other experiments with optimizers
+    # self.__optimizer = tf.keras.optimizers.Adagrad(learning_rate=learning_rate,initial_accumulator_value=1e-3,epsilon=1e-7)
+    # self.__optimizer = tf.keras.optimizers.Adadelta(learning_rate=learning_rate, rho=0.98)
+    # self.__optimizer = Adam(learning_rate=learning_rate, amsgrad=True)
     
 
     self.__early_stop = None
@@ -190,12 +197,12 @@ class Trainer(object):
       'test_score': [],
       'harmonic_score': []
     }
-  
-  
+
+
   def train(self, dataset, epochs=10, dataset_val=None,dataset_test=None, history_learning_process=True):
     # we use an print_return_history flag how to not use this maybe use class or curried function
     # use something to not use 'if' again (like class)!
-    for epoch in range(int(epochs)):
+    for epoch in range(epochs):
       # super hard code
       self.__epochs_cnt += 1
       self.set_score_mode(False)
@@ -213,10 +220,10 @@ class Trainer(object):
         train_score_mtr = self.score_mtr.metric_dataset(dataset)
         
         self.history['train_cost'].append(
-            train_cost_mtr
+            float(train_cost_mtr)
         )
         self.history['train_score'].append(
-            train_score_mtr
+            float(train_score_mtr)
         )
         print('train_cost: {}, train_score: {}'.format(train_cost_mtr, train_score_mtr))
 
@@ -228,10 +235,10 @@ class Trainer(object):
           val_score_mtr = self.score_mtr.metric_dataset(dataset_val)
 
           self.history['val_cost'].append(
-             val_cost_mtr
+             float(val_cost_mtr)
           )
           self.history['val_score'].append(
-              val_score_mtr
+              float(val_score_mtr)
           )
           print('val_cost: {}, val_score: {}'.format(val_cost_mtr, val_score_mtr))
         if dataset_test is not None:
@@ -241,10 +248,10 @@ class Trainer(object):
           test_score_mtr = self.score_mtr.metric_dataset(dataset_test)
 
           self.history['test_cost'].append(
-            test_cost_mtr
+            float(test_cost_mtr)
           )
           self.history['test_score'].append(
-            test_score_mtr
+            float(test_score_mtr)
           )
           print('test_cost: {}, test_score: {}'.format(test_cost_mtr, test_score_mtr))
 
@@ -252,7 +259,7 @@ class Trainer(object):
           harmonic_score = 2*test_score_mtr*val_score_mtr/(test_score_mtr+val_score_mtr)
 
           self.history['harmonic_score'].append(
-            harmonic_score
+            float(harmonic_score)
           )
           print('harmonic score: {}'.format(harmonic_score))
 
@@ -260,6 +267,20 @@ class Trainer(object):
           if self.__early_stop.check_stop(copy.deepcopy(self.history)):
             print('Stop Training')
             break
+
+      try:
+        # hard code early stoping
+        if float(test_score_mtr) == 1.0:
+          global LAMDA, EQ1
+          if not EQ1:
+            EQ1 = True
+            LAMDA = 1e-1
+            print("update lamda to:", LAMDA)
+
+        if float(harmonic_score) > 0.95:
+          break
+      except Exception as e:
+        pass
 
 
 class Knn(object):
@@ -320,28 +341,65 @@ class IP(tf.Module):
     x = self.activation(x)
     return x
 
-class Rnn(tf.keras.Model, Trainer):
-
-  def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4, seed=None):
-    tf.keras.Model.__init__(self,name='rnn')
+class BaseNeuralNetwork(Trainer):
+  def __init__(self, status, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4):
     save_weights_obj = None
     if weights_outfile is not None:
-      save_weights_obj = partial(self.save_weights, "../weights/weights_best_{}.tf".format(weights_outfile))
-    Trainer.__init__(self, early_stop_vars, save_weights_obj, learning_rate)
-    
-    self.__knn = knn
-    self.__score_mode = False
+      save_weights_obj = partial(self.save_weights, "{}/weights/weights_best_{}.tf".format(weights_outfile[0], weights_outfile[1]))
+    super(BaseNeuralNetwork, self).__init__(early_stop_vars, save_weights_obj, learning_rate)
 
-    self.__status = [
+    self.__status = status
+    self.__score_mode = False
+  
+
+  def get_score_mode(self):
+    return self.__score_mode
+
+
+  def set_score_mode(self, score_mode):
+    self.__score_mode = score_mode
+  
+
+  def get_results(self, dataset, score_mode=False):
+
+    # this is simple for 1 loop
+    def forloop(dataset_exmpl):
+        in_idxs = self.cost_mtr.status_idxs(0, self.__status)
+        tr_out_idxs = self.cost_mtr.status_idxs(2, self.__status)
+        for batch in dataset_exmpl:
+            inputs = self.cost_mtr.get_batch_by_indxs(batch, in_idxs)
+            outs = self.cost_mtr.get_batch_by_indxs(batch, tr_out_idxs)
+            if hasattr(self,"__call__"):
+              predict = self.__call__(inputs)
+            elif hasattr(self,"call"):
+              predict = self.call(inputs)
+        return inputs, outs, predict
+    
+    self.set_score_mode(score_mode)
+    inputs_train, outs_train, predict_train = forloop(dataset.train)
+    inputs_val, outs_val, predict_val = forloop(dataset.val)
+    inputs_test, outs_test, predict_test = forloop(dataset.test)
+    self.set_score_mode(False)
+
+    return (inputs_train, outs_train, predict_train), (inputs_val, outs_val, predict_val), (inputs_test, outs_test, predict_test)
+
+class Rnn(tf.keras.Model, BaseNeuralNetwork):
+
+  def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4):
+    tf.keras.Model.__init__(self,name='rnn')
+    save_weights_obj = None
+    status = [
       [0],
       [1],
       [2],
       [1,2]
     ]
-
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
+    
+    self.knn = knn
     self.score_mtr = MetricBase(self,
       [tf.keras.metrics.CategoricalAccuracy()],
-      self.__status,
+      status,
       [0, 0]
     )
 
@@ -350,7 +408,7 @@ class Rnn(tf.keras.Model, Trainer):
         tf.keras.metrics.MeanSquaredError(),
         tf.keras.metrics.CategoricalCrossentropy()
       ],
-      self.__status,
+      status,
       [0,1],
       1
     )
@@ -360,11 +418,10 @@ class Rnn(tf.keras.Model, Trainer):
         tf.keras.losses.MeanSquaredError(),
         tf.keras.losses.CategoricalCrossentropy()
       ],
-      self.__status,
+      status,
       [0, 1]
     )
     
-    tf.random.set_seed(seed)
     
     x_dim = (24, 4)
     self.Input = Input(x_dim)
@@ -384,8 +441,7 @@ class Rnn(tf.keras.Model, Trainer):
     self.denseout1 = Dense(embsD,activation=None,name="denseout1")
     self.denseout2 = Dense(2,activation="softmax",name="denseout2")
 
-  def set_score_mode(self, score_mode):
-    self.__score_mode = score_mode
+
 
   def call(self, inputs):
 
@@ -399,8 +455,8 @@ class Rnn(tf.keras.Model, Trainer):
     y1 = self.denseout1(x31)
 
     # super hard code
-    if self.__score_mode:
-      y1 = self.__knn.predict(y1)
+    if self.get_score_mode():
+      y1 = self.knn.predict(y1)
 
     y2 = self.denseout2(x32)
 
@@ -409,37 +465,32 @@ class Rnn(tf.keras.Model, Trainer):
 # 0 input
 # 1 output | loss
 # 2 output | mtr
-class miniGAEv1(tf.Module, Trainer):
-  def __init__(self, ft_number, w_p, early_stop_vars=None, weights_outfile=None, learning_rate=1e-2):
+class miniGAEv1(tf.Module, BaseNeuralNetwork):
+  def __init__(self, ft_number, w_p, lamda=1, early_stop_vars=None, weights_outfile=None, learning_rate=1e-2):
     tf.Module.__init__(self, name='gae')
-    save_weights_obj = None
-    if weights_outfile is not None:
-      save_weights_obj = partial(self.save_weights, "../weights/weights_best_{}.tf".format(weights_outfile))
-    Trainer.__init__(self, early_stop_vars, save_weights_obj, learning_rate)
-    self.__score_mode = False
-
-    self.__status = [
+    status = [
       [0],
       [0],
       [1,2]
     ]
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
 
     self.cost_mtr = MetricBase(self,
       [WeightedCrossEntropyLogitsMetric(w_p)],
-      self.__status,
+      status,
       [0],
       1
     )
 
     self.score_mtr = MetricBase(self,
       [tf.keras.metrics.BinaryAccuracy()],
-      self.__status,
+      status,
       [0]
     )
 
     self.cost_loss = LossBase(self,
-      [partial(tf.nn.weighted_cross_entropy_with_logits,pos_weight=w_p)],
-      self.__status,
+      [lambda ytr, ypr: lamda*tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(ytr, ypr, w_p))],
+      status,
       [0]
     )
 
@@ -460,14 +511,10 @@ class miniGAEv1(tf.Module, Trainer):
     x = self.encoder(inputs[0],inputs[1])
     y = self.decoder(x)
 
-    if self.__score_mode:
+    if self.get_score_mode():
       y = tf.nn.sigmoid(y)
 
     return tuple((y,))
-  
-  # super hard code
-  def set_score_mode(self, score_mode):
-    self.__score_mode = score_mode
 
 
 #-------------------------------#
@@ -500,7 +547,7 @@ class SGCN(tf.Module):
 
     l = 0
     if not self.__firstlayer:
-      I = myeye(Atld.shape[0])
+      I = n_identity_matrix(Atld.shape[0])
       F = tf.tensordot(I,Atld,[[1],[0]])
       F = tf.tensordot(F,X,[[1, 3],[0,1]])
       l = tf.matmul(F, self.weights) 
@@ -510,9 +557,65 @@ class SGCN(tf.Module):
     out = phi(l)
     return out
 
+class SGAEsolo(tf.Module, BaseNeuralNetwork):
+  def __init__(self, list_f, w_p, Arows=None, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4):
+    tf.Module.__init__(self,  name="extnn")
+    status = [
+      [0],
+      [0],
+      [1,2],
+    ]
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
+
+    self.score_mtr = MetricBase(self,
+      [tf.keras.metrics.BinaryAccuracy()],
+      status,
+      [0]
+    )
+
+    self.cost_mtr = MetricBase(self,
+      [WeightedCrossEntropyLogitsMetric(w_p)],
+      status,
+      [0],
+      1
+    )
+    self.cost_loss = LossBase(self,
+      [lambda ytr, ypr: tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(ytr, ypr, w_p))],
+      status,
+      [0]
+    )
+
+
+    self.__num_stack = len(list_f)
+    self.sgcn0 = SGCN(list_f[0], list_f[1], 'relu', True)
+    for i in range(1, self.__num_stack-1):
+      setattr(
+        self, 'sgcn{}'.format(str(i)),
+        SGCN(
+          list_f[i],
+          list_f[i+1],
+          'relu', name='sgcn{}'.format(str(i))
+        ))
+    if Arows is not None:
+      self.ip = IP(list_f[-1])
+    else:
+      self.ip = IP()
+
+
+  def __call__(self, inputs):
+    x = self.sgcn0(inputs[0], inputs[1])
+    for i in range(1, self.__num_stack-1):
+      x = getattr(self, 'sgcn{}'.format(str(i)))(x, inputs[1])
+    
+    x = tf.reduce_sum(x, axis=2)
+    y = self.ip(x)
+    if self.get_score_mode():
+      y= tf.nn.sigmoid(y)
+
+    return tuple((y,))
 
 class SGAE(tf.Module):
-  def __init__(self, list_f):
+  def __init__(self, list_f, Arows=None):
     super(SGAE,self).__init__(name='sgae')
     self.__num_stack = len(list_f)
     self.sgcn0 = SGCN(list_f[0], list_f[1], 'relu', True)
@@ -524,7 +627,10 @@ class SGAE(tf.Module):
           list_f[i+1],
           'relu', name='sgcn{}'.format(str(i))
         ))
-    self.ip = IP()
+    if Arows is not None:
+      self.ip = IP(list_f[-1])
+    else:
+      self.ip = IP()
 
 
   def __call__(self, Xpr, Atld):
@@ -577,61 +683,56 @@ class RNNext(tf.keras.Model):
   
 
 
-class ExtendedNN(tf.Module, Trainer):
-  def __init__(self, embsD, list_f, w_p, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4, lamda=1):
+class ExtendedNN(tf.Module, BaseNeuralNetwork):
+  def __init__(self, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-1, Arows=None):
     tf.Module.__init__(self,  name="extnn")
-    save_weights_obj = None
-    if weights_outfile is not None:
-      save_weights_obj = partial(self.save_weights, "./weights/weights_best_{}.tf".format(weights_outfile))
-    Trainer.__init__(self, early_stop_vars, save_weights_obj, learning_rate)
-    self.knn = knn
-    self.__score_mode = False
-
-    self.__status = [
+    status = [
       [0],
       [0],
       [0],
       [1,2],
       [1],
       [2],
-      [1,2],
+      [1,2]
     ]
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
+    self.knn = knn
+
 
     self.score_mtr = MetricBase(self,[
       tf.keras.metrics.BinaryAccuracy(),
       tf.keras.metrics.CategoricalAccuracy()],
-      self.__status,
+      status,
       [0, 1, 1]
     )
 
     self.cost_mtr = MetricBase(self,[
-        WeightedCrossEntropyLogitsMetric(w_p, lamda),
-        tf.keras.metrics.MeanSquaredError(),
-        tf.keras.metrics.CategoricalCrossentropy()
+        WeightedCrossEntropyLogitsMetric(w_p),
+        MeanSquaredError(),
+        CategoricalCrossentropy()
       ],
-      self.__status,
+      status,
       [0,1,2],
       1
     )
     self.cost_loss = LossBase(self,
       [
-        lambda ytr, ypr: lamda*tf.nn.weighted_cross_entropy_with_logits(ytr, ypr, w_p),
-        lambda ytr, ypr: tf.keras.losses.MeanSquaredError()(ytr, ypr),
-        lambda ytr, ypr: tf.keras.losses.CategoricalCrossentropy()(ytr, ypr),
-        # tf.keras.losses.MeanSquaredError(),
-        # tf.keras.losses.CategoricalCrossentropy(),
+        lambda ytr, ypr: tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(ytr, ypr, w_p)),
+        lambda ytr, ypr: LAMDA*tf.keras.losses.MeanSquaredError()(ytr, ypr),
+        lambda ytr, ypr: LAMDA*tf.keras.losses.CategoricalCrossentropy()(ytr, ypr),
       ],
-      self.__status,
+      status,
       [0, 1, 2]
     )
     self.__num_stack = len(list_f)
+
 
     self.sgae = SGAE(list_f)
     self.rnn0 = RNNext(embsD)
     for i in range(1, self.__num_stack-1):
       setattr(self, 'rnn{}'.format(str(i)),RNNext(embsD))
-  
-  
+
+
   def significance(self, x):
       N = x.shape[1]-1
       I = tf.reshape(tf.eye(N,N),(1,N,N))
@@ -642,8 +743,9 @@ class ExtendedNN(tf.Module, Trainer):
       s = tf.nn.relu(1-tf.pow(10,-s))
       return s
 
-  def set_score_mode(self, score_mode):
-    self.__score_mode = score_mode
+
+  def save_weights(self, path):
+    np.save(path, self.trainable_variables,allow_pickle=True)
 
   
   def __call__(self, inputs):
@@ -654,31 +756,15 @@ class ExtendedNN(tf.Module, Trainer):
       s = self.significance(out)
       sx = inputs[2]*tf.stack(24*[s],axis=1)
       rhat, ahat = getattr(self, 'rnn{}'.format(str(i)))(sx)
-      if self.__score_mode:
+      if self.get_score_mode():
         rhat = self.knn.predict(rhat)
       outs += [rhat, ahat]
     
-    if self.__score_mode:
+    if self.get_score_mode():
       sgcnouts[-1]= tf.nn.sigmoid(sgcnouts[-1])
 
     return [sgcnouts[-1]]+outs
   
-
-  def get_results(self, dataset, score_mode=False):
-
-    # this is simple for 1 loop
-    def forloop(dataset_exmpl):
-        for Xpr, Atld, x, A, _, r, a in dataset_exmpl:
-            pr = self.__call__([Xpr, Atld, x])
-        return A, r, a, pr
-    
-    self.set_score_mode(score_mode)
-    A_train, r_train, a_train, p_train = forloop(dataset.train)
-    A_val, r_val, a_val, p_val = forloop(dataset.val)
-    A_test, r_test, a_test, p_test = forloop(dataset.test)
-    self.set_score_mode(False)
-
-    return (A_train, r_train, a_train, p_train), (A_val, r_val, a_val, p_val), (A_test, r_test, a_test, p_test)
 
 #-------------------------------#
 #- Pre codes -------------------#
@@ -720,11 +806,3 @@ class GAE(tf.Module):
     x = self.encoder(X,A)
     x = self.decoder(x)
     return x
-
-
-
-
-
-
-  
-  

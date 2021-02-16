@@ -41,13 +41,13 @@ setup(
     install_requires=[
         # 'docopt',
         'pydocstyle',
-        'tensorflow==2.2.0',
-        'numpy==1.19.1',
-        'pandas==1.0.5',
-        'matplotlib==3.3.0',
-        'tensorboard==2.2.2',
-        'scikit-learn==0.23.1',
-        'spektral==0.6.1',
+        'tensorflow',
+        'numpy',
+        'pandas',
+        'matplotlib',
+        'tensorboard',
+        'scikit-learn',
+        'spektral',
         'bayesian-optimization'
     ],
     # entry_points={

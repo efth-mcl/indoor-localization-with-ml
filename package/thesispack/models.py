@@ -12,7 +12,7 @@ from .methods import n_identity_matrix
 
 global LAMDA, EQ1
 EQ1 = False
-LAMDA = 1e-2
+LAMDA = 1
 # 0 input
 # 1 output loss
 # 2 output mtr
@@ -93,16 +93,17 @@ class LossBase(MetricLossBase):
 
 class WeightedCrossEntropyLogitsMetric(tf.keras.metrics.Metric):
 
-  def __init__(self, w_p):
+  def __init__(self, w_p, norm):
     super(WeightedCrossEntropyLogitsMetric, self).__init__(name='weighted_cross_entropy_with_logits')
     self.__loss = partial(tf.nn.weighted_cross_entropy_with_logits,pos_weight=w_p)
+    self.__norm = norm
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
 
   def update_state(self, y_true, y_pred, sample_weight=None):
     self.__losssum.assign_add(tf.reduce_mean(self.__loss(y_true, y_pred)))
 
   def result(self):
-    return self.__losssum
+    return self.__norm *self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
@@ -175,13 +176,16 @@ class EarlyStoping(object):
 
 
 class Trainer(object):
-  def __init__(self, early_stop_vars=None, save_weights_obj=None, learning_rate=1e-4):
-    self.__optimizer = SGD(learning_rate, momentum=0.98)
+  def __init__(self, early_stop_vars=None, save_weights_obj=None, optimizer="SGD", learning_rate=1e-4):
+    if optimizer == "SGD":
+      self.__optimizer = SGD(learning_rate, momentum=0.98)
+    elif optimizer == "Adagrad":
+      self.__optimizer = tf.keras.optimizers.Adagrad(learning_rate=learning_rate,initial_accumulator_value=1e-3,epsilon=1e-7)
+    elif optimizer == "Adadelta":
+      self.__optimizer = tf.keras.optimizers.Adadelta(learning_rate=learning_rate, rho=0.98)
+    elif optimizer == "Adam":
+      self.__optimizer = Adam(learning_rate=learning_rate, amsgrad=True)
 
-    # other experiments with optimizers
-    # self.__optimizer = tf.keras.optimizers.Adagrad(learning_rate=learning_rate,initial_accumulator_value=1e-3,epsilon=1e-7)
-    # self.__optimizer = tf.keras.optimizers.Adadelta(learning_rate=learning_rate, rho=0.98)
-    # self.__optimizer = Adam(learning_rate=learning_rate, amsgrad=True)
     
 
     self.__early_stop = None
@@ -342,11 +346,11 @@ class IP(tf.Module):
     return x
 
 class BaseNeuralNetwork(Trainer):
-  def __init__(self, status, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4):
+  def __init__(self, status, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-4):
     save_weights_obj = None
     if weights_outfile is not None:
       save_weights_obj = partial(self.save_weights, "{}/weights/weights_best_{}.tf".format(weights_outfile[0], weights_outfile[1]))
-    super(BaseNeuralNetwork, self).__init__(early_stop_vars, save_weights_obj, learning_rate)
+    super(BaseNeuralNetwork, self).__init__(early_stop_vars, save_weights_obj, optimizer, learning_rate)
 
     self.__status = status
     self.__score_mode = False
@@ -385,7 +389,7 @@ class BaseNeuralNetwork(Trainer):
 
 class Rnn(tf.keras.Model, BaseNeuralNetwork):
 
-  def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-4):
+  def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-4):
     tf.keras.Model.__init__(self,name='rnn')
     save_weights_obj = None
     status = [
@@ -394,7 +398,7 @@ class Rnn(tf.keras.Model, BaseNeuralNetwork):
       [2],
       [1,2]
     ]
-    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, optimizer, learning_rate)
     
     self.knn = knn
     self.score_mtr = MetricBase(self,
@@ -466,17 +470,17 @@ class Rnn(tf.keras.Model, BaseNeuralNetwork):
 # 1 output | loss
 # 2 output | mtr
 class miniGAEv1(tf.Module, BaseNeuralNetwork):
-  def __init__(self, ft_number, w_p, lamda=1, early_stop_vars=None, weights_outfile=None, learning_rate=1e-2):
+  def __init__(self, ft_number, w_p, norm=1, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-2):
     tf.Module.__init__(self, name='gae')
     status = [
       [0],
       [0],
       [1,2]
     ]
-    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, optimizer, learning_rate)
 
     self.cost_mtr = MetricBase(self,
-      [WeightedCrossEntropyLogitsMetric(w_p)],
+      [WeightedCrossEntropyLogitsMetric(w_p, norm)],
       status,
       [0],
       1
@@ -489,7 +493,7 @@ class miniGAEv1(tf.Module, BaseNeuralNetwork):
     )
 
     self.cost_loss = LossBase(self,
-      [lambda ytr, ypr: lamda*tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(ytr, ypr, w_p))],
+      [lambda ytr, ypr: norm*tf.reduce_mean(tf.nn.weighted_cross_entropy_with_logits(ytr, ypr, w_p))],
       status,
       [0]
     )
@@ -684,7 +688,7 @@ class RNNext(tf.keras.Model):
 
 
 class ExtendedNN(tf.Module, BaseNeuralNetwork):
-  def __init__(self, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, learning_rate=1e-1, Arows=None):
+  def __init__(self, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-1, Arows=None):
     tf.Module.__init__(self,  name="extnn")
     status = [
       [0],
@@ -695,7 +699,7 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
       [2],
       [1,2]
     ]
-    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, learning_rate)
+    BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, optimizer, learning_rate)
     self.knn = knn
 
 

@@ -1,10 +1,10 @@
-from spektral.utils import localpooling_filter
+from spektral.utils import normalized_laplacian
 import tensorflow as tf
 import numpy as np
-from .models import ExtendedNN, SGAEsolo
-from .datasets import ZeroShotDataset, ENNdataset, SGAE_dataset
+from thesispack.models import ExtendedNN, SGAEsolo
+from thesispack.datasets import ZeroShotDataset, ENNdataset, SGAE_dataset
 from sklearn.neighbors import KNeighborsClassifier
-from .methods import history_figure, pca_denoising_figure, pca_denoising_preprocessing, print_confmtx, n_identity_matrix
+from thesispack.methods import history_figure, pca_denoising_figure, pca_denoising_preprocessing, print_confmtx, n_identity_matrix
 import json
 from matplotlib import pyplot as plt
 from thesispack.methods import list2graph

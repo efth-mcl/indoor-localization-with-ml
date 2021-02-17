@@ -1,3 +1,15 @@
+# README
+## Set up & run
+1. install requirements
+    - > pip install -e ./package
+    - > pip install -r requirements.txt  
+2. collect data - Optional
+    - run collect-udp-metric notebook
+    - collect data for dataset
+3. run train-gae notebook to create node embeddings 
+4. run train-2or for learning results
+5. run thesispack.\_\_main\_\_ for ExtededNN
+
 ## TODOS (Typical)
 - clean Test and PreCode from notebooks
 - ~~make python package~~
@@ -7,6 +19,6 @@
 - fix .gitignore to ignore DataFigures
 - ~~set privet epochs counting var (dynamic)~~
 - ~~add Extended NN~~
-- create BaseModel ?!
-- modify methods.{print_confmtx, pca_denoising_preprocessing} to be general for other data classes
+- ~~create BaseModel ?!~~
+- ~~modify methods.{print_confmtx, pca_denoising_preprocessing} to be general for other data classes~~
 - modify methods.py functions to classes (per comments !?)

@@ -1,1 +1,12 @@
-sympy==1.7.1
+sympy
+setuptools
+tensorflow
+numpy
+scikit-learn
+networkx
+matplotlib
+spektral
+scipy
+requests
+pandas
+seaborn

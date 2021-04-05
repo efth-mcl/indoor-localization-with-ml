@@ -140,6 +140,22 @@ class CategoricalCrossentropy(tf.keras.metrics.Metric):
   def reset_states(self):
     self.__losssum.assign(0)
 
+class LogCosMetric(tf.keras.metrics.Metric):
+  def __init__(self):
+    super(LogCosMetric, self).__init__(name="logcosmtr")
+    self.__loss = tf.keras.metrics.logcosh
+    self.__losssum = self.add_weight(name="losssum", initializer='zeros')
+
+  def update_state(self, y_true, y_pred):
+    logcosmtr = self.__loss(y_true, y_pred)
+    self.__losssum.assign_add(tf.reduce_mean(logcosmtr))
+
+  def result(self):
+    return self.__losssum
+
+  def reset_states(self):
+    self.__losssum.assign(0)
+
 class EarlyStoping(object):
   def __init__(self, entries, save_weights_obj=None):
     self.es_strategy = None

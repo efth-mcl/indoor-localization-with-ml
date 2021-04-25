@@ -192,7 +192,7 @@ class EarlyStoping(object):
 
 
 class Trainer(object):
-  def __init__(self, early_stop_vars=None, save_weights_obj=None, optimizer="SGD", learning_rate=1e-4):
+  def __init__(self, early_stop_vars=None, save_weights_obj=None, optimizer="SGD", learning_rate=1e-4, clip_norm=2.0):
     if optimizer == "SGD":
       self.__optimizer = SGD(learning_rate, momentum=0.98)
     elif optimizer == "Adagrad":
@@ -202,6 +202,7 @@ class Trainer(object):
     elif optimizer == "Adam":
       self.__optimizer = Adam(learning_rate=learning_rate, amsgrad=True)
 
+    self.__clip_norm = clip_norm
     
 
     self.__early_stop = None
@@ -218,6 +219,14 @@ class Trainer(object):
       'harmonic_score': []
     }
 
+  def set_lr_rate(self, lr):
+    self.__optimizer.lr.assign(lr)
+
+  def set_clip_norm(self, clip_norm):
+    self.__clip_norm = clip_norm
+
+  def set_early_stop(self, early_stop_vars):
+    self.__early_stop = EarlyStoping(early_stop_vars, None)
 
   def train(self, dataset, epochs=10, dataset_val=None,dataset_test=None, history_learning_process=True):
     # we use an print_return_history flag how to not use this maybe use class or curried function
@@ -230,6 +239,8 @@ class Trainer(object):
         with tf.GradientTape() as tape:
           cost_loss = self.cost_loss.loss_batch(batch)
         grads = tape.gradient(cost_loss, self.trainable_variables)
+        if self.__clip_norm > 0:
+          grads = [(tf.clip_by_norm(grad, clip_norm=self.__clip_norm)) for grad in grads]
         self.__optimizer.apply_gradients(zip(grads, self.trainable_variables))
 
       print ('Epoch {} finished'.format(self.__epochs_cnt))

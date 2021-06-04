@@ -8,11 +8,12 @@ from spektral.utils import gcn_filter
 from networkx import Graph, adjacency_matrix
 import networkx as nx
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from itertools import product
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 import matplotlib as mlb
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from thesispack.datasets import WIFIRTTDataset
 
 
 # ---------------------- #
@@ -495,7 +496,6 @@ def history_figure(history, figsize=(16, 8), legend_fontsize=18, axes_label_fond
 
         if plot_type == 'score':
             try:
-                plt.plot(history["harmonic_score"], label=r"$harmonic \, score$")
                 max_harm = np.max(history["harmonic_score"])
                 max_harm_arg = np.argmax(history["harmonic_score"])
                 plt.plot(max_harm_arg, max_harm, '*', label=r'$harmonic \, score \, (best)$', markersize=15,
@@ -512,7 +512,7 @@ def history_figure(history, figsize=(16, 8), legend_fontsize=18, axes_label_fond
         plt.xticks(fontsize=ticks_fontsize)
         plt.yticks(fontsize=ticks_fontsize)
 
-    hasattr_list = [(k, any(v)) for k, v in history.items() if k != "harmonic_score"]
+    hasattr_list = [(k, any(v)) for k, v in history.items()]
     plt.figure(figsize=figsize)
     plt.subplot(1, 2, 1)
     score_cost_plot('cost')
@@ -654,6 +654,208 @@ def pca_denoising_figure(pca_vl, pca_ts, pca_emb, knn_pca, Zlabels, save_obj=Non
 def n_identity_matrix(N):
     return tf.cast([[[1 if i == j and j == w else 0 for i in range(N)] for j in range(N)] for w in range(N)],
                    tf.float32)
+
+
+# ---------------------- #
+# WiFi RTT data -------- #
+# analysis ------------- #
+# ---------------------- #
+
+def position_figure(df, ap_points_with_index, save_obj=None):
+    plt.figure(figsize=(16,8))
+    plt.plot(df["GroundTruthPositionX[m]"], df["GroundTruthPositionY[m]"], 'o', label="moving device position")
+    plt.plot(ap_points_with_index[:,1], ap_points_with_index[:,2], '^', markersize=12, label="AP position")
+    for inx, x, y in ap_points_with_index:
+        plt.text(x,y, int(inx), fontsize=20)
+
+    plt.legend(fontsize=16)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    if save_obj is None:
+        plt.xticks(color='red')
+        plt.yticks(color='red')
+        plt.xlabel(r'$x \, axis$', fontsize=20, color='red')
+        plt.ylabel(r'$y \, axis$', fontsize=20, color='red')
+    else:
+        plt.xlabel(r'$x \, axis$', fontsize=20)
+        plt.ylabel(r'$y \, axis$', fontsize=20)
+        plt.savefig('{}/DataFigures/{}/{}.svg'.format(*save_obj))
+
+
+def timestamp_figure(data, ylabel, save_obj=None):
+    plt.figure(figsize=(16, 8))
+    plt.plot(data)
+
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    if save_obj is None:
+        plt.xticks(color='red')
+        plt.yticks(color='red')
+        plt.xlabel(r'$\# \, of \, samples$', fontsize=20, color='red')
+        plt.ylabel(ylabel, fontsize=20, color='red')
+    else:
+        plt.xlabel(r'$\# \, of \, samples$', fontsize=20)
+        plt.ylabel(ylabel, fontsize=20)
+        plt.savefig('{}/DataFigures/{}/{}.svg'.format(*save_obj))
+
+
+def timestamp_grad_figure(data, ylabel, up_thres, save_obj=None):
+    plt.figure(figsize=(16, 8))
+    plt.plot(data, label=r'$\nabla \, timestamp$')
+    plt.plot([0, len(data)], [up_thres, up_thres], label='upper threshold ' + r'$({})$'.format(up_thres))
+
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.legend(fontsize=20, loc="lower right")
+    if save_obj is None:
+        plt.xticks(color='red')
+        plt.yticks(color='red')
+        plt.xlabel(r'$\# \, of \, samples$', fontsize=20, color='red')
+        plt.ylabel(ylabel, fontsize=20, color='red')
+    else:
+        plt.xlabel(r'$\# \, of \, samples$', fontsize=20)
+        plt.ylabel(ylabel, fontsize=20)
+        plt.savefig('{}/DataFigures/{}/{}.svg'.format(*save_obj))
+
+def splited_timestamp_figure(data, new_m_ind, ylabel, save_obj=None):
+    def sub_figure(split_data, si):
+        plt.figure(figsize=(16,8))
+        plt.plot(split_data)
+        if save_obj is None:
+            plt.xticks(color='red')
+            plt.yticks(color='red')
+            plt.xlabel(r'$\# \, of \, samples$', fontsize=20, color='red')
+            plt.ylabel(ylabel, fontsize=20, color='red')
+        else:
+            plt.xlabel(r'$\# \, of \, samples$', fontsize=20)
+            plt.ylabel(ylabel, fontsize=20)
+            plt.savefig('{}/DataFigures/{}/{}-{}.svg'.format(*save_obj, si))
+    n_subplots = len(new_m_ind) - 1
+    nx_subplots = n_subplots // 2
+    ny_subplots = n_subplots - nx_subplots
+
+    for si in range(n_subplots):
+        # plt.subplot(nx_subplots, ny_subplots, si + 1)
+        sub_figure(data[new_m_ind[si]+1:new_m_ind[si+1]].to_numpy(), si)
+
+
+def tod_and_spectrum_per_ap_with_pad(df, new_m_ind, dt):
+    max_pad = 0
+    tods_ap = []
+    spectrs_ap = []
+    for i in range(len(new_m_ind)-1):
+        dfmini = df.loc[new_m_ind[i]+1:new_m_ind[i+1]]
+
+        mint = dfmini["%Timestamp[s]"].min()
+        dfmini["%Timestamp[s]"] += -mint
+        widx = 0
+        while True:
+            tod_ap = []
+            spectr_ap = []
+            data = dfmini[(dfmini["%Timestamp[s]"] <= dt*(widx+1)) & (dfmini["%Timestamp[s]"] > dt*widx)].iloc[
+                :, :57+11
+            ]
+            if len(data) == 0:
+                break
+            for i in range(1, 13):
+                tod_ap.append(data[data["AP_index"] == i]["ToD_factor[m]"].to_numpy())
+                spectr_ap.append(data[data["AP_index"] == i].iloc[:, 11:].applymap(lambda x: np.abs(complex(x.replace('i', 'j')))).to_numpy())
+
+                if len(tod_ap[-1]) > max_pad:
+                    max_pad = len(tod_ap[-1])
+
+            tods_ap.append(tod_ap)
+            spectrs_ap.append(spectr_ap)
+            widx += 1
+
+    for i in range(len(tods_ap)):
+        tods_ap[i] = pad_sequences(tods_ap[i], padding="post", maxlen=max_pad)
+        spectrs_ap[i] = pad_sequences(spectrs_ap[i], padding="post", maxlen=max_pad)
+    tods_ap = tf.transpose(np.array(tods_ap), perm=[0,2,1]).numpy()
+    spectrs_ap = tf.transpose(np.array(spectrs_ap), perm=[0,2,1,3]).numpy()
+    return tods_ap, spectrs_ap
+
+
+
+# ---------------------- #
+# WiFi RTT model ------- #
+# results -------------- #
+# ---------------------- #
+def plot_psxy(model, dataset: WIFIRTTDataset, plotd='train', maxdist=np.inf, save_obj=None):
+    pxy_t = []
+    pxy_t_ = []
+    if plotd == 'train':
+        for t in dataset.train:
+            pxy_t.append(t[-1])
+            pxy_t_.append(model(t)[0])
+    elif plotd == 'val':
+        for t in dataset.val:
+            pxy_t.append(t[-1])
+            pxy_t_.append(model(t)[0])
+    elif plotd == 'test':
+        for t in dataset.test:
+            pxy_t.append(t[-1])
+            pxy_t_.append(model(t)[0])
+
+    pxy_t_ = tf.concat(pxy_t_, axis=0)
+    pxy_t = tf.concat(pxy_t, axis=0)
+
+    max_xy, min_xy = dataset.get_min_max_pos()
+    pxy_t = pxy_t * (max_xy - min_xy) + min_xy
+    pxy_t_ = pxy_t_ * (max_xy - min_xy) + min_xy
+
+    dists = tf.sqrt(tf.reduce_sum((pxy_t - pxy_t_) ** 2, axis=1)).numpy()
+    dists = dists[np.where(dists <= maxdist)]
+    plt.figure(figsize=(16, 8))
+    hist_cumul = plt.hist(dists, density=True, histtype='step', cumulative=True, bins=150)
+    p90 = np.where(hist_cumul[0] >= 0.9)[0][0]
+    print(hist_cumul[1][p90])
+    plt.scatter(hist_cumul[1][p90], hist_cumul[0][p90])
+    plt.figure(figsize=(16, 8))
+    plt.hist(dists, bins=150)
+    plt.figure(figsize=(16, 8))
+
+
+def plot_psxy2(model, dataset: WIFIRTTDataset, plotd='train', kfirst=10, plot_arrows=False, save_obj=None):
+    pxy_t = []
+    pxy_t_ = []
+    if plotd == 'train':
+        for t in dataset.train:
+            pxy_t.append(t[-1])
+            pxy_t_.append(model(t)[0])
+    elif plotd == 'val':
+        for t in dataset.val:
+            pxy_t.append(t[-1])
+            pxy_t_.append(model(t)[0])
+    elif plotd == 'test':
+        for t in dataset.test:
+            pxy_t.append(t[-1])
+            pxy_t_.append(model(t)[0])
+
+    pxy_t_ = tf.concat(pxy_t_, axis=0)
+    pxy_t = tf.concat(pxy_t, axis=0)
+
+    max_xy, min_xy = dataset.get_min_max_pos()
+    pxy_t = pxy_t * (max_xy - min_xy) + min_xy
+    pxy_t_ = pxy_t_ * (max_xy - min_xy) + min_xy
+    k = tf.reduce_sum(tf.subtract(pxy_t, pxy_t_) ** 2, axis=1)
+    k = tf.argsort(k)
+    k = k[:kfirst].numpy().tolist()
+    pxy_t = pxy_t.numpy()[k]
+    pxy_t_ = pxy_t_.numpy()[k]
+    plt.figure(figsize=(16, 8))
+    if plot_arrows:
+        for y, y_ in zip(pxy_t, pxy_t_):
+            plt.arrow(y_[0], y_[1], y[0] - y_[0], y[1] - y_[1])
+    plt.scatter(pxy_t[:, 0], pxy_t[:, 1], marker='^', label='actual')
+    plt.scatter(pxy_t_[:, 0], pxy_t_[:, 1], marker='*', label='predict')
+
+    plt.figure(figsize=(16, 8))
+    plt.subplot(1, 2, 1)
+    plt.scatter(pxy_t[:, 0], pxy_t_[:, 0])
+    plt.subplot(1, 2, 2)
+    plt.scatter(pxy_t[:, 1], pxy_t_[:, 1])
+
 
 if __name__ == "__main__":
     import doctest

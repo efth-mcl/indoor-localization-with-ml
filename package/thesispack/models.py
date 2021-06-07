@@ -1,14 +1,12 @@
 from sklearn.neighbors import KNeighborsClassifier
 import tensorflow as tf
 from tensorflow.keras import Model
-from thesispack.base import BaseNeuralNetwork, MetricBase, LossBase, LAMBDA
-from thesispack.metrics import WeightedCrossEntropyLogits, MeanSquaredError, CategoricalCrossentropy
-from thesispack.layers import GCN, SGCN, IP
-from thesispack.losses import WeightedCrossEntropyWithLogits, MeanSquaredErrorWithLambda, CategoricalCrossentropyWithLambda
+from thesispack.base import BaseNeuralNetwork, MetricBase, LossBase
+from thesispack.metrics import WeightedCrossEntropyWithLogits as mWCEL, MeanSquaredErrorWithLambda as mMSEL, CategoricalCrossentropyWithLambda as mCCEL, MeanEuclidianError
+from thesispack.layers import GCN, SGCN, IP, Ap_LSTM, Attention, FC
+from thesispack.losses import WeightedCrossEntropyWithLogits as lWCEL, MeanSquaredErrorWithLambda as lMSEL, CategoricalCrossentropyWithLambda as lCCEL
 from tensorflow.keras.layers import Dense, Input, LSTM, Bidirectional
 
-from package.thesispack.layers import Ap_LSTM, Attention
-from package.thesispack.metrics import MeanEuclidianError
 
 
 class miniGAE(tf.Module, BaseNeuralNetwork):
@@ -23,7 +21,7 @@ class miniGAE(tf.Module, BaseNeuralNetwork):
         BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, optimizer, learning_rate)
 
         self.cost_mtr = MetricBase(self,
-                                   [WeightedCrossEntropyLogits(w_p, norm)],
+                                   [mWCEL(w_p, norm)],
                                    status,
                                    [0],
                                    1
@@ -83,11 +81,70 @@ class Knn(object):
         return pred
 
 
+class GCNforDepth(tf.Module, BaseNeuralNetwork):
+    def __init__(self, nf0, nc, depth=1, nfi=64):
+        tf.Module.__init__(self, name='my_gcn')
+        status = [
+            [0],
+            [0],
+            [1, 2]
+        ]
+        BaseNeuralNetwork.__init__(self, status, learning_rate=1e-2)
+        self.depth = depth
+
+        self.score_mtr = MetricBase(self,
+                                    [tf.keras.metrics.CategoricalAccuracy()],
+                                    status,
+                                    [0]
+                                    )
+        self.cost_mtr = MetricBase(self,
+                                   [tf.keras.metrics.CategoricalCrossentropy()],
+                                   status,
+                                   [0],
+                                   1
+                                   )
+        self.cost_loss = LossBase(self,
+                                  # make custom cost
+                                  [tf.keras.losses.CategoricalCrossentropy()],
+                                  status,
+                                  [0]
+                                  )
+        depthi = '1'
+        setattr(self, 'gcn{}'.format(depthi), GCN(nf0, nfi, 'relu'))
+        if self.depth > 1:
+            l = 0.3 / (self.depth - 1)
+        else:
+            l = 1
+        for d in range(1, self.depth):
+            depthi = str(d + 1)
+            setattr(self, 'gcn{}'.format(depthi), GCN(nfi, nfi, 'relu'))
+            drop = l * d + 0.1
+
+        self.flatten = tf.keras.layers.Flatten()
+        self.fc1 = FC(nf0 * nfi, 256, 'relu')
+        self.out = FC(256, nc, 'softmax')
+
+    def __call__(self, inputs):
+        depthi = '1'
+        x = getattr(self, 'gcn{}'.format(depthi))(inputs[0], inputs[1])
+        for d in range(1, self.depth):
+            depthi = str(d + 1)
+            x = getattr(self, 'gcn{}'.format(depthi))(x, inputs[1])
+
+        x = self.flatten(x)
+        x = self.fc1(x)
+        y = self.out(x)
+        y = tuple([y])
+        return y
+
+    def set_knn_out(self, knn_out):
+        pass
+
+
 class Rnn(Model, BaseNeuralNetwork):
 
     def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-4):
-        tf.keras.Model.__init__(self, name='rnn')
-        save_weights_obj = None
+        Model.__init__(self, name='rnn')
         status = [
             [0],
             [1],
@@ -229,7 +286,7 @@ class ExtRNN(tf.keras.Model):
 
 class ExtendedNN(tf.Module, BaseNeuralNetwork):
     def __init__(self, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD",
-                 learning_rate=1e-1, Arows=None):
+                 learning_rate=1e-1, lamda=1):
         tf.Module.__init__(self, name="extnn")
         status = [
             [0],
@@ -251,9 +308,9 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
                                     )
 
         self.cost_mtr = MetricBase(self, [
-            WeightedCrossEntropyLogits(w_p),
-            MeanSquaredError(),
-            CategoricalCrossentropy()
+            mWCEL(w_p, norm),
+            mMSEL(lamda),
+            mCCEL(lamda)
         ],
                                    status,
                                    [0, 1, 2],
@@ -261,9 +318,9 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
                                    )
         self.cost_loss = LossBase(self,
                                   [
-                                      WeightedCrossEntropyWithLogits(),
-                                      MeanSquaredErrorWithLambda(LAMBDA),
-                                      CategoricalCrossentropyWithLambda(LAMBDA)
+                                      lWCEL(w_p, norm),
+                                      lMSEL(lamda),
+                                      lCCEL(lamda)
                                   ],
                                   status,
                                   [0, 1, 2]
@@ -285,8 +342,6 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
         s = tf.nn.relu(1 - tf.pow(10, -s))
         return s
 
-    # def save_weights(self, path):
-    #     np.save(path, self.trainable_variables, allow_pickle=True)
 
     def __call__(self, inputs):
 
@@ -306,8 +361,8 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
         return [sgcnouts[-1]] + outs
 
 
-class RTT_RNN_AT(Model, BaseNeuralNetwork):
-    def __init__(self, early_stop_vars=None):
+class RttRnnAt(Model, BaseNeuralNetwork):
+    def __init__(self, early_stop_vars=None, min_xy=0, max_xy=1):
         Model.__init__(self, name="rtt_rnn")
         status = [
             [0],
@@ -317,7 +372,7 @@ class RTT_RNN_AT(Model, BaseNeuralNetwork):
         ]
         BaseNeuralNetwork.__init__(self, status, early_stop_vars, None, "Adam", 1e-4)
         self.score_mtr = MetricBase(self,
-                                    [MeanEuclidianError()],
+                                    [MeanEuclidianError(min_xy, max_xy)],
                                     status,
                                     [0]
                                     )
@@ -369,3 +424,45 @@ class RTT_RNN_AT(Model, BaseNeuralNetwork):
         y = tf.concat([xap_ant1_tod, xap_ant2_tod], axis=-1)
         y = self.denseout(y)
         return tuple((y,))
+
+
+# -------------------------------#
+# - Pre codes -------------------#
+# -------------------------------#
+class GAE(tf.Module):
+    def __init__(self, ft_number):
+        super(GAE, self).__init__(name='gae')
+
+        # self.gcn1 = GCN(ft_number,128,'relu')
+        # self.gcn2 = GCN(128,256)
+
+        self.gcn1 = GCN(ft_number, 64, 'relu')
+        self.gcn2 = GCN(64, 128, 'relu')
+        self.gcn3 = GCN(128, 256, 'relu')
+        self.gcn4 = GCN(256, 512)
+
+        self.ip = IP()
+
+    def encoder(self, X, A):
+        # x = self.gcn1(X,A)
+        # x = self.gcn2(x,A)
+
+        x = self.gcn1(X, A)
+        x = self.gcn2(x, A)
+        x = self.gcn3(x, A)
+        x = self.gcn4(x, A)
+        return x
+
+    def decoder(self, z):
+        x = self.ip(z)
+        return x
+
+    def set_weights(self, weights):
+        self.gcn1.weights = weights[0]
+        self.gcn2.weights = weights[1]
+        self.ip.weights = weights[4]
+
+    def __call__(self, X, A):
+        x = self.encoder(X, A)
+        x = self.decoder(x)
+        return x

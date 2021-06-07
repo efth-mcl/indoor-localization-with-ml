@@ -2,10 +2,10 @@ from tensorflow.keras.metrics import Metric
 import tensorflow as tf
 from functools import partial
 
-class WeightedCrossEntropyLogits(Metric):
+class WeightedCrossEntropyWithLogits(Metric):
 
   def __init__(self, w_p, norm):
-    super(WeightedCrossEntropyLogits, self).__init__(name='weighted_cross_entropy_with_logits')
+    super(WeightedCrossEntropyWithLogits, self).__init__(name='weighted_cross_entropy_with_logits')
     self.__loss = partial(tf.nn.weighted_cross_entropy_with_logits,pos_weight=w_p)
     self.__norm = norm
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
@@ -14,44 +14,52 @@ class WeightedCrossEntropyLogits(Metric):
     self.__losssum.assign_add(tf.reduce_mean(self.__loss(y_true, y_pred)))
 
   def result(self):
-    return self.__norm *self.__losssum
+    return self.__norm * self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
 
 
-class MeanSquaredError(Metric):
-  def __init__(self):
-    super(MeanSquaredError, self).__init__(name='l2mse')
+class MeanSquaredErrorWithLambda(Metric):
+  def __init__(self, lamda=1):
+    super(MeanSquaredErrorWithLambda, self).__init__(name='l2mse')
     self.__loss = tf.keras.metrics.MeanSquaredError()
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
+    self.__lambda = lamda
 
   def update_state(self, y_true, y_pred):
     l2loss = self.__loss(y_true, y_pred)
     self.__losssum.assign_add(tf.reduce_mean(l2loss))
 
   def result(self):
-    return LAMDA*self.__losssum
+    return self.__lambda*self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
 
+  def set_lambda(self, lamda):
+      self.__lambda = lamda
 
-class CategoricalCrossentropy(Metric):
-  def __init__(self):
-    super(CategoricalCrossentropy, self).__init__(name='l2cce')
+
+class CategoricalCrossentropyWithLambda(Metric):
+  def __init__(self, lamda=1):
+    super(CategoricalCrossentropyWithLambda, self).__init__(name='l2cce')
     self.__loss = tf.keras.metrics.CategoricalCrossentropy()
     self.__losssum = self.add_weight(name='losssum', initializer='zeros')
+    self.__lambda = lamda
 
   def update_state(self, y_true, y_pred):
     l2loss = self.__loss(y_true, y_pred)
     self.__losssum.assign_add(tf.reduce_mean(l2loss))
 
   def result(self):
-    return LAMDA*self.__losssum
+    return self.__lambda*self.__losssum
 
   def reset_states(self):
     self.__losssum.assign(0)
+
+  def set_lambda(self, lamda):
+      self.__lambda = lamda
 
 
 class LogCosMetric(Metric):

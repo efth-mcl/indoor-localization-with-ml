@@ -21,7 +21,7 @@
 - ~~add Extended NN~~
 - ~~create BaseModel ?!~~
 - ~~modify methods.{print_confmtx, pca_denoising_preprocessing} to be general for other data classes~~
-- modify methods.py functions to classes (per comments !?)
-- !! methods become huge.. any idea to split..    
+- ~~modify methods.py functions to classes (per comments !?)~~
+- ~~!! methods become huge.. any idea to split..~~
 - rename thesispack {m2m_deep_pack!?}
 - ~~refactor thessispack -> {split models file to base, metrics, models..}~~

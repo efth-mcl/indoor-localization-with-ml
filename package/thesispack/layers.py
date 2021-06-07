@@ -1,10 +1,29 @@
 import tensorflow as tf
 from tensorflow.python.keras.layers import LSTM, Dense
-from thesispack.methods import n_identity_matrix
+from thesispack.methods.nn import n_identity_matrix
 
 
 
 #tf Modules
+class FC(tf.Module):
+    def __init__(self, in_features,out_features,activation=None):
+        super(FC,self).__init__(name="fc")
+
+        self.weights = tf.Variable(
+            tf.keras.initializers.GlorotUniform()(shape=[in_features, out_features]),
+            name='weights'
+        )
+        self.bais = tf.Variable(
+            tf.keras.initializers.GlorotUniform()(shape=[out_features]),
+            name='bais'
+        )
+        self.activation = tf.keras.activations.get(activation)
+
+    def __call__(self,inputs):
+        x = tf.matmul(inputs,self.weights) + self.bais
+        x = self.activation(x)
+        return x
+
 class GCN(tf.Module):
     def __init__(self, in_features, out_features, activation=None, name=None):
         if name is None:

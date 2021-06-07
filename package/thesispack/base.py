@@ -1,21 +1,14 @@
-
-from tensorflow.keras.optimizers import Adam, SGD
-from tensorflow.keras.activations import tanh
 import tensorflow as tf
-from tensorflow.keras import initializers
-from sklearn.neighbors import KNeighborsClassifier
-import numpy as np
+from tensorflow.keras.optimizers import Adam, SGD
 import copy
 from functools import partial
-
-from thesispack.models import GCN, IP
-
-from .methods import n_identity_matrix
+# from thesispack.layers import GCN, IP
 
 
-global LAMBDA, EQ1
+
+global EQ1
 EQ1 = False
-LAMBDA = 1
+
 # 0 input
 # 1 output loss
 # 2 output mtr
@@ -298,43 +291,3 @@ class BaseNeuralNetwork(Trainer):
     return (inputs_train, outs_train, predict_train), (inputs_val, outs_val, predict_val), (inputs_test, outs_test, predict_test)
 
 
-#-------------------------------#
-#- Pre codes -------------------#
-#-------------------------------#
-class GAE(tf.Module):
-  def __init__(self,ft_number):
-    super(GAE,self).__init__(name='gae')
-
-    # self.gcn1 = GCN(ft_number,128,'relu')
-    # self.gcn2 = GCN(128,256)
-
-    self.gcn1 = GCN(ft_number,64,'relu')
-    self.gcn2 = GCN(64,128,'relu')
-    self.gcn3 = GCN(128,256,'relu')
-    self.gcn4 = GCN(256,512)
-
-    self.ip = IP()
-  
-  def encoder(self,X, A):
-      # x = self.gcn1(X,A)
-      # x = self.gcn2(x,A)
-
-      x = self.gcn1(X,A)
-      x = self.gcn2(x,A)
-      x = self.gcn3(x,A)
-      x = self.gcn4(x,A)
-      return x
-  
-  def decoder(self,z):
-    x = self.ip(z)
-    return x
-  
-  def set_weights(self,weights):
-    self.gcn1.weights = weights[0]
-    self.gcn2.weights = weights[1]
-    self.ip.weights = weights[4]
-  
-  def __call__(self,X,A):
-    x = self.encoder(X,A)
-    x = self.decoder(x)
-    return x

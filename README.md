@@ -7,8 +7,8 @@
     - run collect-udp-metric notebook
     - collect data for dataset
 3. run train-gae notebook to create node embeddings 
-4. run train-2or for learning results
-5. run thesispack.\_\_main\_\_ for ExtededNN
+4. run train-2ornn notebook for learning results
+5. run train-extnn notebook for ExtededNN
 
 ## TODOS (Typical)
 - clean Test and PreCode from notebooks

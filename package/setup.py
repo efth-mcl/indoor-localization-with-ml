@@ -15,7 +15,7 @@ with open(join(this_dir, 'README.md'), encoding='utf-8') as file:
 
 
 long_description = """
-    There put efthymis-mcl thesis package files.
+    
 """
 
 setup(
@@ -24,7 +24,7 @@ setup(
     description='Thesis package files.',
     long_description=long_description,
     url='https://github.com/mmlab-aueb/efthymis-mcl-MSc-Thesis',
-    license='UNLICENSE',
+    license='MIT',
     classifiers=[
         'Development Status :: 3 - Alpha'
         'Intended Audience :: Developers',
@@ -48,7 +48,6 @@ setup(
         'matplotlib',
         'tensorboard',
         'scikit-learn',
-        'spektral',
         'bayesian-optimization'
     ],
     # entry_points={

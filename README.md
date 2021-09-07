@@ -25,3 +25,5 @@
 - ~~!! methods become huge.. any idea to split..~~
 - rename thesispack {m2m_deep_pack!?}
 - ~~refactor thessispack -> {split models file to base, metrics, models..}~~
+- split this repo in two repos (thesis-pack, thesis)
+- put "put here a link of repo" thesispack/methods/graphs -> def graph_stats

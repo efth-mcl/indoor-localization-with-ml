@@ -1,5 +1,5 @@
-import numpy as np
 import tensorflow as tf
+import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -27,8 +27,7 @@ def pca_denoising(p_expls, pca_emb, pca_expls, knn, knn_pca, Dx=0, Dy=1):
     return pca_expls
 
 
-# Z is true Embeddings
-def pca_denoising_preprocessing(model, dataset, Z, Y, embidx=0):
+def pca_denoising_preprocessing(model, dataset, Z, Y, embidx=0, pca_emb_idxs=[0, 1, 2]):
     (_, _, p_train), (_, _, p_val), (_, _, p_test) = model.get_results(dataset, False)
 
     pca = PCA(n_components=2)
@@ -40,20 +39,14 @@ def pca_denoising_preprocessing(model, dataset, Z, Y, embidx=0):
 
     Dx = 0
     Dy = 1
-    # :3 means up to room 2, change it to be more general
     knn_pca = KNeighborsClassifier(1)
-    knn_pca.fit(pca_emb[:3, [Dx, Dy]], Y)
+    knn_pca.fit(pca_emb[pca_emb_idxs, [Dx, Dy]], Y)
 
     pca_vl = pca_denoising(p_val[embidx], pca_emb, pca_vl, model.knn, knn_pca)
     pca_ts = pca_denoising(p_test[embidx], pca_emb, pca_ts, model.knn, knn_pca)
 
     return pca_vl, pca_ts, pca_emb, knn_pca
 
-
 def n_identity_matrix(N):
     return tf.cast([[[1 if i == j and j == w else 0 for i in range(N)] for j in range(N)] for w in range(N)],
                    tf.float32)
-
-if __name__ == "__main__":
-    import doctest
-    doctest.testmod()

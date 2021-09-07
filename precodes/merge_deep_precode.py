@@ -1,5 +1,5 @@
 from itertools import product
-from spektral.utils import localpooling_filter
+from spektral.utils import gcn_filter
 import tensorflow as tf
 import numpy as np
 
@@ -139,7 +139,7 @@ a0 = tf.cast([
 ],tf.float32)
 a0 = tf.reshape(a0,[1,6,6])
 A = tf.concat([a0,a0],axis=0)
-A = localpooling_filter(A.numpy())
+A = gcn_filter(A.numpy())
 A = tf.cast(A, tf.float32)
 
 w0 = 200*tf.keras.initializers.GlorotUniform()(shape=[4, 5])

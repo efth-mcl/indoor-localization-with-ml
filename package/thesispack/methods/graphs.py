@@ -4,9 +4,6 @@ from networkx import Graph, adjacency_matrix
 import tensorflow as tf
 from typing import Union
 
-from spektral.utils import gcn_filter
-
-
 def a2g(A):
     """
     Adjacency matrix to graph object.
@@ -194,6 +191,7 @@ def numpy_to_mega_batch(X:list, A:list):
     for (x, a) in zip(X, A):
         if a.shape[0] < max_d:
             a = post_concat(a)
+            x = post_concat(x)
         mega_batch_A.append(a)
         mega_batch_X.append(x)
     mega_batch_A = np.array(mega_batch_A)

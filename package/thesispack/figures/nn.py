@@ -2,7 +2,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mlb
 
-def pca_denoising_figure(pca_vl, pca_ts, pca_emb, knn_pca, Zlabels, save_obj=None):
+
+def pca_denoising_figure(pca_vl, pca_ts, pca_emb, knn_pca, zlabels, pca_emb_idxs= [0,1,2], save_obj=None):
+    """
+    Draw the knn_pca spaces, plot target embeddings, predicted validation (seen) embeddings and test (unseen) embeddings.
+
+    Args:
+        pca_vl: A ndarray, pca denoised validation embeddings where predicted,
+        pca_ts: A ndarray, pca denoised test embeddings where predicted,
+        pca_emb: A ndarray, pca denoised true embeddings,
+        knn_pca: A KNeighborsClassifier object, trained by pca_emb,
+        zlabels: A list, list of true embedding labels,
+        pca_emb_idxs: A list (Optional), list of subpaths saving figure. Default is [0,1,2],
+        save_obj: A list (Optional), list of subpaths saving figure. Default is None.
+
+    """
     mlb.style.use('default')
     dpi = 100
     xmin = np.min(pca_emb[:, 0])
@@ -16,7 +30,7 @@ def pca_denoising_figure(pca_vl, pca_ts, pca_emb, knn_pca, Zlabels, save_obj=Non
 
     xlin = np.linspace(xmin, xmax, dpi)
     ylin = np.linspace(ymin, ymax, dpi)
-    xx, yy = np.meshgrid(ylin, ylin)
+    xx, yy = np.meshgrid(xlin, ylin)
     knn_space = np.argmax(knn_pca.predict(np.c_[xx.ravel(), yy.ravel()]), axis=1)
     knn_space = knn_space.reshape(xx.shape)
 
@@ -24,23 +38,35 @@ def pca_denoising_figure(pca_vl, pca_ts, pca_emb, knn_pca, Zlabels, save_obj=Non
     Dy = 1
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    plt.plot(pca_emb[:3, Dx], pca_emb[:3, Dy], 'o', label='embs', markersize=15)
+    plt.plot(pca_emb[pca_emb_idxs, Dx], pca_emb[pca_emb_idxs, Dy], 'o', label='embs', markersize=15)
     plt.plot(pca_vl[:, Dx], pca_vl[:, Dy], '*', label='val', markersize=10)
     plt.plot(pca_ts[:, Dx], pca_ts[:, Dy], '*', label='test', markersize=10)
 
-    for (v, l) in zip(pca_emb, Zlabels[:3]):
+    for (v, l) in zip(pca_emb, zlabels[:3]):
         plt.text(v[Dx], v[Dy], l, fontsize=20)
 
     ax.contourf(xx, yy, knn_space, cmap=plt.get_cmap('tab20c'), levels=2)
     plt.legend()
     if save_obj is not None:
-        plt.savefig('{}/{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')
+        plt.savefig('{}/{}.eps'.format(*save_obj), format='eps')
     else:
         plt.show()
 
 
 
 def history_figure(history, figsize=(16, 8), legend_fontsize=18, axes_label_fondsize=22, ticks_fontsize=16, save_obj=None):
+    f"""
+
+    Args:
+        history: A dict, train, validation test and harmonic mean history of model. The model interference ` thesispack.base.BaseNueralNetwork ` 
+                 object,
+        figsize: A tuple or list, figure size of x and y axis,
+        legend_fontsize: A int,
+        axes_label_fondsize: A int,
+        ticks_fontsize: A int,
+        save_obj: A list, list of path and name of saving figure.
+
+    """
     zstype = lambda ksplit0: '(seen)' if ksplit0 in ['train', 'val'] else '(unseen)'
 
     def score_cost_plot(plot_type='cost'):
@@ -78,17 +104,21 @@ def history_figure(history, figsize=(16, 8), legend_fontsize=18, axes_label_fond
     score_cost_plot('score')
 
     if save_obj is not None:
-        plt.savefig('{}/{}/DataFigures/{}/{}-{}.eps'.format(*save_obj), format='eps')
+        plt.savefig('{}/{}.eps'.format(*save_obj), format='eps')
     else:
         plt.show()
 
 
 def print_confmtx(model, dataset, lerninfo: str, indexes_list: list):
-
+    """
+    Print confusion matrix per examples (train, test, validation)
+    Args:
+        model: An object, The model interference ` thesispack.base.BaseNueralNetwork ` object,
+        dataset: An object,
+        lerninfo: A str,
+        indexes_list: A list.
+    """
     def confmtx(y, yhat):
-        """
-        docstring
-        """
         confmtx = np.zeros((y.shape[1], y.shape[1]))
         y = np.argmax(y, axis=1)
         yhat = np.argmax(yhat, axis=1)

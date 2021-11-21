@@ -1,15 +1,64 @@
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Input, Bidirectional, Dense
-from thesispack.base import BaseNeuralNetwork, LossBase, MetricBase
-from thesispack.layers import IP
-from thesispack.losses import WeightedCrossEntropyWithLogits as lWCEL, MeanSquaredErrorWithLambda as lMSEL, CategoricalCrossEntropyWithLambda as lCCEL
-from thesispack.methods.nn import n_identity_matrix
-from thesispack.metrics import WeightedCrossEntropyWithLogits as mWCEL, MeanSquaredErrorWithLambda as mMSEL, CategoricalCrossEntropyWithLambda as mCCEL
+from algomorphism.base import BaseNeuralNetwork, LossBase, MetricBase
+from algomorphism.layers import IP
+from algomorphism.losses import WeightedCrossEntropyWithLogits as lWCEL, MeanSquaredErrorWithLambda as lMSEL, CategoricalCrossEntropyWithLambda as lCCEL
+from algomorphism.methods.nn import three_d_identity_matrix
+from algomorphism.metrics import WeightedCrossEntropyWithLogits as mWCEL, MeanSquaredErrorWithLambda as mMSEL, CategoricalCrossEntropyWithLambda as mCCEL
+
+
+class RNNbase(tf.keras.Model):
+    def __init__(self, embsD):
+        super(RNNbase, self).__init__(name='rnnb')
+
+        x_dim = (24, 4)
+        self.Input = Input(x_dim)
+
+        self.lstm1 = LSTM(256, return_sequences=True, name="lstm1")
+        self.bidirectional1 = Bidirectional(self.lstm1, name="bidirectional1")
+
+        self.lstm2 = LSTM(256, return_sequences=True, name="lstm2")
+        self.bidirectional2 = Bidirectional(self.lstm2, name="bidirectional2")
+
+        self.lstm31 = LSTM(512, name="lstm31")
+        self.bidirectional31 = Bidirectional(self.lstm31, name="bidirectional31")
+
+        self.lstm32 = LSTM(512, name="lstm32")
+        self.bidirectional32 = Bidirectional(self.lstm32, name="bidirectional32")
+
+        self.fc11 = Dense(512, activation='tanh', name="fc11")
+        self.fc21 = Dense(1024, activation='tanh', name="fc21")
+        self.fc31 = Dense(2048, activation='tanh', name="fc31")
+
+        self.f12 = Dense(640, activation='relu', name="fc12")
+
+        self.denseout1 = Dense(embsD, activation=None, name="denseout1")
+        self.denseout2 = Dense(2, activation="softmax", name="denseout2")
+
+    def call(self, x):
+        x = self.bidirectional1(x)
+
+        x = self.bidirectional2(x)
+
+        x1 = self.bidirectional31(x)
+        x2 = self.bidirectional32(x)
+
+        x1 = self.fc11(x1)
+        x1 = self.fc21(x1)
+        x1 = self.fc31(x1)
+
+        x2 = self.f12(x2)
+
+        y1 = self.denseout1(x1)
+
+        y2 = self.denseout2(x2)
+
+        return y1, y2
 
 
 class Rnn(tf.keras.Model, BaseNeuralNetwork):
 
-    def __init__(self, embsD, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-4):
+    def __init__(self, dataset,  embsD, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD", learning_rate=1e-4):
         tf.keras.Model.__init__(self, name='rnn')
         status = [
             [0],
@@ -17,7 +66,6 @@ class Rnn(tf.keras.Model, BaseNeuralNetwork):
             [2],
             [1, 2]
         ]
-        BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, optimizer, learning_rate)
 
         self.knn = knn
         self.score_mtr = MetricBase(self,
@@ -45,41 +93,18 @@ class Rnn(tf.keras.Model, BaseNeuralNetwork):
                                   [0, 1]
                                   )
 
-        x_dim = (24, 4)
-        self.Input = Input(x_dim)
+        BaseNeuralNetwork.__init__(self, status, dataset, early_stop_vars, weights_outfile, optimizer, learning_rate)
 
-        self.lstm1 = LSTM(24, batch_input_shape=(128, 24, 4), return_sequences=True, name="lstm1")
-        self.bidirectional1 = Bidirectional(self.lstm1, name="bidirectional1")
+        self.rnnbase = RNNbase(embsD)
 
-        self.lstm2 = LSTM(24, return_sequences=True, name="lstm2")
-        self.bidirectional2 = Bidirectional(self.lstm2, name="bidirectional2")
+    def call(self, inputs, is_score=False):
+        y1, y2 = self.rnnbase.call(inputs[0])
 
-        self.lstm31 = LSTM(24, name="lstm31")
-        self.bidirectional31 = Bidirectional(self.lstm31, name="bidirectional31")
-
-        self.lstm32 = LSTM(24, name="lstm32")
-        self.bidirectional32 = Bidirectional(self.lstm32, name="bidirectional32")
-
-        self.denseout1 = Dense(embsD, activation=None, name="denseout1")
-        self.denseout2 = Dense(2, activation="softmax", name="denseout2")
-
-    def call(self, inputs):
-        x = self.bidirectional1(inputs[0])
-
-        x = self.bidirectional2(x)
-
-        x31 = self.bidirectional31(x)
-        x32 = self.bidirectional32(x)
-
-        y1 = self.denseout1(x31)
-
-        # super hard code
-        if self.get_score_mode():
+        if is_score:
             y1 = self.knn.predict(y1)
 
-        y2 = self.denseout2(x32)
-
         return y1, y2
+
 
 class SGCN(tf.Module):
     def __init__(self, in_features, out_features, activation=None, firstlayer=False, name=None):
@@ -107,7 +132,8 @@ class SGCN(tf.Module):
             return out
 
         if not self.__firstlayer:
-            I = n_identity_matrix(Atld.shape[0])
+            I = three_d_identity_matrix(Atld.shape[0])
+            I = tf.cast(I, tf.float32)
             F = tf.tensordot(I, Atld, [[1], [0]])
             F = tf.tensordot(F, X, [[1, 3], [0, 1]])
             l = tf.matmul(F, self.weights)
@@ -118,7 +144,7 @@ class SGCN(tf.Module):
         return out
 
 class SGAE(tf.Module):
-    def __init__(self, list_f, Arows=None):
+    def __init__(self, list_f, ipw=False):
         super(SGAE, self).__init__(name='sgae')
         self.__num_stack = len(list_f)
         self.sgcn0 = SGCN(list_f[0], list_f[1], 'relu', True)
@@ -130,7 +156,7 @@ class SGAE(tf.Module):
                     list_f[i + 1],
                     'relu', name='sgcn{}'.format(str(i))
                 ))
-        if Arows is not None:
+        if ipw:
             self.ip = IP(list_f[-1])
         else:
             self.ip = IP()
@@ -149,44 +175,8 @@ class SGAE(tf.Module):
         return ys
 
 
-class ExtRNN(tf.keras.Model):
-  def __init__(self, embsD):
-    super(ExtRNN,self).__init__(name='ext_rnn')
-
-    x_dim = (24, 4)
-    self.Input = Input(x_dim)
-
-    self.lstm1 =  LSTM(24,return_sequences=True,name="lstm1")
-    self.bidirectional1 = Bidirectional(self.lstm1,name="bidirectional1")
-
-    self.lstm2 = LSTM(24,return_sequences=True,name="lstm2")
-    self.bidirectional2 =  Bidirectional(self.lstm2,name="bidirectional2")
-
-    self.lstm31 = LSTM(24,name="lstm31")
-    self.bidirectional31 = Bidirectional(self.lstm31,name="bidirectional31")
-
-    self.lstm32 = LSTM(24,name="lstm32")
-    self.bidirectional32 = Bidirectional(self.lstm32,name="bidirectional32")
-
-    self.denseout1 = Dense(embsD,activation=None,name="denseout1")
-    self.denseout2 = Dense(2,activation="softmax",name="denseout2")
-
-  def call(self, udp_input):
-    x = self.bidirectional1(udp_input)
-
-    x = self.bidirectional2(x)
-
-    x31 = self.bidirectional31(x)
-    x32 = self.bidirectional32(x)
-
-    y1 = self.denseout1(x31)
-    y2 = self.denseout2(x32)
-
-    return y1, y2
-
-
 class ExtendedNN(tf.Module, BaseNeuralNetwork):
-    def __init__(self, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD",
+    def __init__(self, dataset, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD",
                  learning_rate=1e-1, lamda=1):
         tf.Module.__init__(self, name="extnn")
         status = [
@@ -198,7 +188,7 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
             [2],
             [1, 2]
         ]
-        BaseNeuralNetwork.__init__(self, status, early_stop_vars, weights_outfile, optimizer, learning_rate)
+
         self.knn = knn
 
         self.score_mtr = MetricBase(self, [
@@ -225,12 +215,15 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
                                   status,
                                   [0, 1, 2]
                                   )
+
+        BaseNeuralNetwork.__init__(self, status, dataset, early_stop_vars, weights_outfile, optimizer, learning_rate)
+
         self.__num_stack = len(list_f)
 
-        self.sgae = SGAE(list_f, Arows=0)
-        self.rnn0 = ExtRNN(embsD)
+        self.sgae = SGAE(list_f, ipw=True)
+        self.rnn0 = RNNbase(embsD)
         for i in range(1, self.__num_stack):
-            setattr(self, 'rnn{}'.format(str(i)), ExtRNN(embsD))
+            setattr(self, 'rnn{}'.format(str(i)), RNNbase(embsD))
 
     def significance(self, x):
         N = x.shape[1] - 1
@@ -243,18 +236,18 @@ class ExtendedNN(tf.Module, BaseNeuralNetwork):
         return s
 
 
-    def __call__(self, inputs):
+    def __call__(self, inputs, is_score=False):
         sgcnouts = self.sgae(inputs[0], inputs[1])
         outs = []
         for i, out in enumerate(sgcnouts[:-1]):
             s = self.significance(out)
             sx = inputs[2] * tf.stack(24 * [s], axis=1)
             rhat, ahat = getattr(self, 'rnn{}'.format(str(i)))(sx)
-            if self.get_score_mode():
+            if is_score:
                 rhat = self.knn.predict(rhat)
             outs += [rhat, ahat]
 
-        if self.get_score_mode():
+        if is_score:
             sgcnouts[-1] = tf.nn.sigmoid(sgcnouts[-1])
 
         return [sgcnouts[-1]] + outs

@@ -73,5 +73,5 @@ topology is a Star with center the controller(Laptop) and RPIs in the edges. The
 An Extended Neural Network for dynamic routing where we have one mobile device.
 > [train enn notebook](train-extnn.ipynb)
 
-### GCN performance per depth
+## GCN performance per depth
 > [train depth gcn](gcn-depth.ipynb)

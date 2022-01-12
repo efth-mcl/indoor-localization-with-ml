@@ -1,14 +1,14 @@
-# README
-## Set up & run
-1. install requirements
-    - > pip install -e ./package
-    - > pip install -r requirements.txt  
-2. collect data - Optional
-    - run collect-udp-metric notebook
-    - collect data for dataset
-3. run train-gae notebook to create node embeddings 
-4. run train-2ornn notebook for learning results
-5. run train-extnn notebook for ExtededNN
+# Indoor Localization with Machine Learning Technics
+
+## Install requirements
+>`pip install -r requirements.txt`
+
+## Indoor Localization (Core work)
+See: [indoor loc.](indoor_localization)
+
+## Indoor Positioning (Spin off work)
+See: [indoor pos.](indoor_positioning)
+
 
 ## TODOS (Typical)
 - clean Test and PreCode from notebooks

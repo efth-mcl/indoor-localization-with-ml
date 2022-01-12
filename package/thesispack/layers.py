@@ -17,7 +17,7 @@ class FC(tf.Module):
         )
         self.activation = tf.keras.activations.get(activation)
 
-    def __call__(self,inputs):
+    def __call__(self, inputs):
         x = tf.matmul(inputs,self.weights) + self.bais
         x = self.activation(x)
         return x

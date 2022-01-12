@@ -36,8 +36,8 @@ class MiniGAE(tf.Module, BaseNeuralNetwork):
                                   [0]
                                   )
 
-        self.gcn1 = GCN(ft_number, 16, "relu", "gcn1")
-        self.gcn2 = GCN(16, 32, name="gcn2")
+        self.gcn1 = GCN(ft_number, 256, "relu", "gcn1")
+        self.gcn2 = GCN(256, 512, name="gcn2")
         self.ip = IP()
 
     def encoder(self, X, Atld):

@@ -53,7 +53,7 @@ class GaeDataset(GraphBaseDataset):
 
 
 class ZeroShotDataset(object):
-    def __init__(self, embs_id, pathroot='..'):
+    def __init__(self, embs_id, pathroot='.'):
         self.__a_mlb = MultiLabelBinarizer()
         self.__r_lb = LabelBinarizer()
         self.__pathroot = pathroot
@@ -203,7 +203,7 @@ class ZeroShotDataset(object):
 
 
 class ENNDataset(ZeroShotDataset, GraphBaseDataset):
-    def __init__(self, embid='32', pathroot='..', seen_labels=['0', '2'], unseen_labels=['1']):
+    def __init__(self, embid='32', pathroot='.', seen_labels=['0', '2'], unseen_labels=['1']):
         super(ENNDataset, self).__init__(embid, pathroot)
         self.load_data(seen_labels, unseen_labels)
         adj = vertexes_to_adjacency(SGAE_dataset['route_links'][0])

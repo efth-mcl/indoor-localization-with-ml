@@ -5,9 +5,7 @@ from tensorflow.keras.optimizers import Adam, SGD
 import copy
 from functools import partial
 
-# 0 input
-# 1 output loss
-# 2 output mtr
+
 class MetricLossBase(object):
   """
   Base of (Metric and Loss)-Base classes. This class uses 3 types for examples (input or true output) where going through
@@ -373,9 +371,6 @@ class Trainer(object):
         print()
         return cost_mtr, None
 
-
-    # we use an print_return_history flag how to not use this maybe use class or curried function
-    # use something to not use 'if' again (like class)!
     for epoch in range(epochs):
       # super hard code
       self.__epochs_cnt += 1

@@ -5,7 +5,7 @@ from pandas import read_csv
 from io import StringIO
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-WIFI_RTT_PATH = "Data.zip"
+WIFI_RTT_PATH = "data/Data.zip"
 
 
 

@@ -1,4 +1,4 @@
-# Indoor Localization with Machine Learning Technics
+# Indoor Localization with Machine Learning Techniques
 
 ## Install requirements
 >`pip install -r requirements.txt`

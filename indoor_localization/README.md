@@ -10,14 +10,14 @@ of graphs.
 
 ## Hardware Configuration
 
-We use 4 Raspberry Pi 3 (RPI) with Raspbian OS all RPIs has an external Wi-Fi adapter type [bale link edo](https://blb)
+We use 4 Raspberry Pi 3 (RPI) with Raspbian OS all RPIs has an external Wi-Fi adapter
 which are used for communication on ad-hoc network. The internal antenna uses for communication with controller device
 where we execute the experiments on centralized network using an Access Point (router). Also, we use for Machine Learning
 tasks a GPU to accelerate the computational routines.
 
 ### Installation
 
-1. Install Raspbian OS, we use [Raspberry Pi Imager](link) to install OS on SD card, and after that we create an empty 
+1. Install Raspbian OS, we use Raspberry Pi Imager to install OS on SD card, and after that we create an empty 
    file on **boot folder** with name `ssh` with **no** file extension with purpose to connect by controller device
    to RPIs via SSH protocol.
 2. Paste the `interfaces` file:
@@ -47,13 +47,13 @@ tasks a GPU to accelerate the computational routines.
 
 
 ## Routing Experiments
-We use [Iperf3](ipefer3_link) tool.
+We use Iperf3 tool.
 
 ### Routing analysis
 In this part we visualize the collection of data for UDP Throughput experiments on a variety of
 Transition Power ${10, 20, 31} dBm$ for $60 sec.$ we set the RPI0 as client and the rest as servers.
-we save the results in [data/routing](data/routing) folder. We visualize the experiment results on notbook:
->[routing analysis](routinganalisis.ipynb).
+we save the results in [data/routing](data/routing/) folder. We visualize the experiment results on notebook:
+>[routing analysis](routinganalisis.ipynb)
 
 ### UDP Throughput as Metric
 In this part we collect UDP examples for $24 sec.$. We set as mobile device the controller

@@ -23,7 +23,7 @@ setup(
     version=__version__,
     description='Thesis package files.',
     long_description=long_description,
-    url='https://github.com/mmlab-aueb/efthymis-mcl-MSc-Thesis',
+    url='https://github.com/efth-mcl/indoor-localization-with-ml',
     license='MIT',
     classifiers=[
         'Development Status :: 3 - Alpha'

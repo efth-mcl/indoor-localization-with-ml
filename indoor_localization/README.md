@@ -64,14 +64,29 @@ topology is a Star with center the controller(Laptop) and RPIs in the edges. The
 ## Machine Learning Systems for Indoor Localization
 
 ### 2ORNN System
-1. We train a GAE for deep feature extraction (aka Graph Embeddings)
-   > [train gae notebook](train-gae.ipynb)
-2. We train a stacked RNN based on LSTM with 2 outputs one the moving status (moving/stading) and space location
-   > [train 2ornn notebook](train-2ornn.ipynb)
+
+![2orrn_arc](pictures/2ornn-arc.png)
+
+This system has 2 phases:
+1. A Graph AutoEncoder GAE (upper one) which initially learns to construct the Graph Embeddings $Z$.
+  > [train gae notebook](train-gae.ipynb)
+2. As input for 2 Output Recurrent Neural Network 2ORNN the UDP Throughput as Metric and giving as target $Z$ by GAE. 
+   Learning to to recognize indoor location and moving status (standing or moving).
+  > [train 2ornn notebook](train-2ornn.ipynb)
+
 
 ### Extended NN System
-An Extended Neural Network for dynamic routing where we have one mobile device.
+![enn_arc](pictures/enn-arc.png)
+
+An Extended Neural Network for dynamic routing where we have one mobile device. In this model we consider the change of 
+routing table of mobile device. So we model a Significant Graph Auto Encoder to giving as input the routing table graph 
+and get as output the significance of node and depth (number of hops). The model consider of the UDP Throughput as Metric
+by a node how much important is. This type of learning is Semi-Supervised having two objectives:
+1. the reconstruction of  Graph Auto Encoder and
+2. the 2ORNN task (indoor localization and moving status).
+
 > [train enn notebook](train-extnn.ipynb)
 
 ## GCN performance per depth
+An additional task of Thesis work.
 > [train depth gcn](gcn-depth.ipynb)

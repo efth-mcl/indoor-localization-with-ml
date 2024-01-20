@@ -1,5 +1,5 @@
-from thesispack.base import BaseNeuralNetwork, MetricBase, LossBase
-from thesispack.layers import Attention
+from algomorphism.model.base import BaseNeuralNetwork, LossBase, MetricBase
+from algomorphism.model.layers import Attention
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Dense
 
@@ -29,7 +29,7 @@ class Ap_LSTM(tf.keras.layers.Layer):
         return y
 
 class RttRnnAt(tf.keras.Model, BaseNeuralNetwork):
-    def __init__(self, early_stop_vars=None, min_xy=0, max_xy=1):
+    def __init__(self, early_stop_vars=None, min_xy=0, max_xy=1, optimizer=None):
         tf.keras.Model.__init__(self, name="rtt_rnn")
         status = [
             [0],
@@ -37,7 +37,7 @@ class RttRnnAt(tf.keras.Model, BaseNeuralNetwork):
             [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0],
             [1, 2]
         ]
-        BaseNeuralNetwork.__init__(self, status, early_stop_vars, None, "Adam", 1e-4)
+        BaseNeuralNetwork.__init__(self, status, early_stop_vars, None, optimizer, 1e-4)
 
         self.cost_mtr = MetricBase(self,
                                    [tf.keras.metrics.MeanSquaredError()],

@@ -1,4 +1,4 @@
-git+https://github.com/efthymis-mcl/algomorphism@zero_shot_learninig
+git+https://github.com/efthymis-mcl/algomorphism@v1.0.0
 sympy
 setuptools
 tensorflow

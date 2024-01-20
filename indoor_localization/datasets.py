@@ -1,8 +1,8 @@
 from sklearn.preprocessing import MultiLabelBinarizer, LabelBinarizer
-from algomorphism.methods.graphs import vertexes_to_adjacency
-from algomorphism.methods.nn import three_d_identity_matrix
-from algomorphism.datasets.graph_base import GraphBaseDataset
-from algomorphism.datasets import SeenUnseenBase
+from algomorphism.method.graph import vertexes2adjacency
+from algomorphism.method.opt import three_d_identity_matrix
+from algomorphism.dataset.graph.base import GraphBaseDataset
+from algomorphism.dataset.zeroshot.base import SeenUnseenBase
 import tensorflow as tf
 import numpy as np
 import json
@@ -39,7 +39,7 @@ SGAE_dataset ={
 class GaeDataset(GraphBaseDataset):
     def __init__(self):
         super(GaeDataset, self).__init__()
-        a = vertexes_to_adjacency(GAE_dataset['listgraph'])
+        a = vertexes2adjacency(GAE_dataset['listgraph'])
         a = a.reshape(1, a.shape[0], a.shape[1])
         a += np.eye(a.shape[-1])
         atld = self.renormalization(a)
@@ -206,7 +206,7 @@ class ENNDataset(ZeroShotDataset, GraphBaseDataset):
     def __init__(self, embid='32', pathroot='.', seen_labels=['0', '2'], unseen_labels=['1']):
         super(ENNDataset, self).__init__(embid, pathroot)
         self.load_data(seen_labels, unseen_labels)
-        adj = vertexes_to_adjacency(SGAE_dataset['route_links'][0])
+        adj = vertexes2adjacency(SGAE_dataset['route_links'][0])
         adj = adj.reshape(1, adj.shape[0], adj.shape[1])
         adj += np.eye(adj.shape[-1])
         atld = self.renormalization(adj)

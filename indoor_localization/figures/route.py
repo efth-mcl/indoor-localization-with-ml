@@ -102,7 +102,7 @@ def mean_udp_bar3d_figure(complite_means_per_txpower, line_means_per_txpower, ba
                           figsize=(8, 8), legend_fontsize=20, legend_loc='upper right', axes_label_fontsize=12,
                           ticks_fontsize=12, save_obj=None):
     fig = plt.figure(figsize=figsize)
-    ax = fig.gca(projection='3d')
+    ax = fig.add_subplot(projection='3d')
 
     xy = list(product([1, 2, 3], [1, 2, 3]))
     x = np.array([x[0] for x in xy])

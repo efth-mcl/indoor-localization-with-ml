@@ -1,10 +1,10 @@
 import tensorflow as tf
 from tensorflow.keras.layers import LSTM, Input, Bidirectional, Dense
-from algomorphism.base import BaseNeuralNetwork, LossBase, MetricBase
-from algomorphism.layers import IP
-from algomorphism.losses import WeightedCrossEntropyWithLogits as lWCEL, MeanSquaredErrorWithLambda as lMSEL, CategoricalCrossEntropyWithLambda as lCCEL
-from algomorphism.methods.nn import three_d_identity_matrix
-from algomorphism.metrics import WeightedCrossEntropyWithLogits as mWCEL, MeanSquaredErrorWithLambda as mMSEL, CategoricalCrossEntropyWithLambda as mCCEL
+from algomorphism.model.base import BaseNeuralNetwork, LossBase, MetricBase
+from algomorphism.model.layers import IP
+from algomorphism.model.losses import WeightedCrossEntropyWithLogits as lWCEL, MeanSquaredErrorWithLambda as lMSEL, CategoricalCrossEntropyWithLambda as lCCEL
+from algomorphism.method.opt import three_d_identity_matrix
+from algomorphism.model.metrics import WeightedCrossEntropyWithLogits as mWCEL, MeanSquaredErrorWithLambda as mMSEL, CategoricalCrossEntropyWithLambda as mCCEL
 
 
 class RNNbase(tf.keras.Model):
@@ -176,7 +176,7 @@ class SGAE(tf.Module):
 
 
 class ExtendedNN(tf.Module, BaseNeuralNetwork):
-    def __init__(self, dataset, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, optimizer="SGD",
+    def __init__(self, dataset, embsD, list_f, w_p, norm, knn, early_stop_vars=None, weights_outfile=None, optimizer=None,
                  learning_rate=1e-1, lamda=1):
         tf.Module.__init__(self, name="extnn")
         status = [
